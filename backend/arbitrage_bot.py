@@ -3,6 +3,16 @@ import datetime
 from fetch_current_polymarket import fetch_polymarket_data_struct
 from fetch_current_kalshi import fetch_kalshi_data_struct
 
+# Fee rates (approximate) — update these if platform fees change
+POLYMARKET_FEE_RATE = 0.02  # ~2% on winnings
+KALSHI_FEE_RATE = 0.07      # ~7% on profits
+
+def _estimate_fees(poly_cost, kalshi_cost):
+    """Estimate trading fees for both legs."""
+    poly_fee = (1.00 - poly_cost) * POLYMARKET_FEE_RATE if poly_cost < 1.0 else 0
+    kalshi_fee = (1.00 - kalshi_cost) * KALSHI_FEE_RATE if kalshi_cost < 1.0 else 0
+    return round(poly_fee + kalshi_fee, 4)
+
 def check_arbitrage():
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Scanning for arbitrage...")
     
@@ -32,6 +42,12 @@ def check_arbitrage():
 
     print(f"POLYMARKET | Strike: ${poly_strike:,.2f} | Up: ${poly_up_cost:.3f} | Down: ${poly_down_cost:.3f}")
 
+    # Sanity check: Up + Down should be approximately $1.00 for a binary market
+    poly_sum = poly_up_cost + poly_down_cost
+    if poly_sum > 0 and (poly_sum < 0.85 or poly_sum > 1.15):
+        print(f"WARNING: Polymarket prices may be stale/incorrect: Up + Down = ${poly_sum:.3f} (expected ~$1.00)")
+        return
+
     # Kalshi Data
     kalshi_markets = kalshi_data['markets']
     if not kalshi_markets:
@@ -54,7 +70,11 @@ def check_arbitrage():
         # Kalshi prices are in cents (integer), convert to dollars
         kalshi_yes_cost = km['yes_ask'] / 100.0
         kalshi_no_cost = km['no_ask'] / 100.0
-        
+
+        # Skip markets with unpriced legs (0 = no quote available)
+        if km['yes_ask'] == 0 or km['no_ask'] == 0:
+            continue
+
         # Only print markets close to Poly strike to avoid spamming?
         # Or print all? User said "show the data it is using".
         # Let's print the ones within a reasonable range (e.g. +/- $2500)
@@ -88,27 +108,31 @@ def check_arbitrage():
             
             if total_cost < 1.00:
                 margin = 1.00 - total_cost
+                est_fees = _estimate_fees(poly_down_cost, kalshi_yes_cost)
                 print(f"!!! ARBITRAGE FOUND !!!")
                 print(f"Type: Poly Strike ({poly_strike}) > Kalshi Strike ({kalshi_strike})")
                 print(f"Strategy: Buy Poly DOWN + Kalshi YES")
                 print(f"Total Cost: ${total_cost:.3f}")
                 print(f"Min Payout: $1.00")
                 print(f"Risk-Free Profit: ${margin:.3f} per unit")
+                print(f"Est. Fees: ${est_fees:.4f} | After Fees: ${margin - est_fees:.4f} {'(PROFITABLE)' if margin > est_fees else '(NOT PROFITABLE)'}")
                 found_arb = True
 
         # Case 2: Poly_Strike < Kalshi_Strike
         elif poly_strike < kalshi_strike:
             total_cost = poly_up_cost + kalshi_no_cost
             print(f"    [Poly < Kalshi] Checking: Poly Up (${poly_up_cost:.3f}) + Kalshi No (${kalshi_no_cost:.3f}) = ${total_cost:.3f}")
-            
+
             if total_cost < 1.00:
                 margin = 1.00 - total_cost
+                est_fees = _estimate_fees(poly_up_cost, kalshi_no_cost)
                 print(f"!!! ARBITRAGE FOUND !!!")
                 print(f"Type: Poly Strike ({poly_strike}) < Kalshi Strike ({kalshi_strike})")
                 print(f"Strategy: Buy Poly UP + Kalshi NO")
                 print(f"Total Cost: ${total_cost:.3f}")
                 print(f"Min Payout: $1.00")
                 print(f"Risk-Free Profit: ${margin:.3f} per unit")
+                print(f"Est. Fees: ${est_fees:.4f} | After Fees: ${margin - est_fees:.4f} {'(PROFITABLE)' if margin > est_fees else '(NOT PROFITABLE)'}")
                 found_arb = True
                 
         # Case 3: Poly_Strike == Kalshi_Strike
@@ -119,11 +143,13 @@ def check_arbitrage():
             
             if cost1 < 1.00:
                 margin = 1.00 - cost1
+                est_fees = _estimate_fees(poly_down_cost, kalshi_yes_cost)
                 print(f"!!! ARBITRAGE FOUND !!!")
                 print(f"Type: Equal Strikes ({poly_strike})")
                 print(f"Strategy: Buy Poly DOWN + Kalshi YES")
                 print(f"Total Cost: ${cost1:.3f}")
                 print(f"Risk-Free Profit: ${margin:.3f} per unit")
+                print(f"Est. Fees: ${est_fees:.4f} | After Fees: ${margin - est_fees:.4f} {'(PROFITABLE)' if margin > est_fees else '(NOT PROFITABLE)'}")
                 found_arb = True
                 
             # Check Pair 2: Poly Up + Kalshi No
@@ -132,11 +158,13 @@ def check_arbitrage():
             
             if cost2 < 1.00:
                 margin = 1.00 - cost2
+                est_fees = _estimate_fees(poly_up_cost, kalshi_no_cost)
                 print(f"!!! ARBITRAGE FOUND !!!")
                 print(f"Type: Equal Strikes ({poly_strike})")
                 print(f"Strategy: Buy Poly UP + Kalshi NO")
                 print(f"Total Cost: ${cost2:.3f}")
                 print(f"Risk-Free Profit: ${margin:.3f} per unit")
+                print(f"Est. Fees: ${est_fees:.4f} | After Fees: ${margin - est_fees:.4f} {'(PROFITABLE)' if margin > est_fees else '(NOT PROFITABLE)'}")
                 found_arb = True
 
     if not found_arb:
