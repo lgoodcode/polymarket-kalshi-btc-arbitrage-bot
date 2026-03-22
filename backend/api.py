@@ -4,6 +4,10 @@ from fetch_current_polymarket import fetch_polymarket_data_struct
 from fetch_current_kalshi import fetch_kalshi_data_struct
 import datetime
 
+# Fee rates (approximate) — update these if platform fees change
+POLYMARKET_FEE_RATE = 0.02  # ~2% on winnings
+KALSHI_FEE_RATE = 0.07      # ~7% on profits (capped at contract price for taker)
+
 app = FastAPI()
 
 # Enable CORS for frontend
@@ -14,6 +18,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def _estimate_fees(poly_cost, kalshi_cost):
+    """Estimate trading fees for both legs. Returns total estimated fees."""
+    # Polymarket: fee on profit (winning leg pays out $1, profit = $1 - cost)
+    poly_profit = 1.00 - poly_cost
+    poly_fee = poly_profit * POLYMARKET_FEE_RATE if poly_profit > 0 else 0
+
+    # Kalshi: fee on profit (winning leg pays out $1, profit = $1 - cost)
+    kalshi_profit = 1.00 - kalshi_cost
+    kalshi_fee = kalshi_profit * KALSHI_FEE_RATE if kalshi_profit > 0 else 0
+
+    return round(poly_fee + kalshi_fee, 4)
+
+def _add_fee_info(check):
+    """Add fee estimation fields to an arbitrage check dict."""
+    est_fees = _estimate_fees(check["poly_cost"], check["kalshi_cost"])
+    check["estimated_fees"] = est_fees
+    check["margin_after_fees"] = round(check["margin"] - est_fees, 4)
+    check["profitable_after_fees"] = check["margin_after_fees"] > 0
 
 @app.get("/arbitrage")
 def get_arbitrage_data():
@@ -47,6 +70,14 @@ def get_arbitrage_data():
         response["errors"].append("Polymarket Strike is None")
         return response
 
+    # Sanity check: Up + Down should be approximately $1.00 for a binary market
+    poly_sum = poly_up_cost + poly_down_cost
+    if poly_sum > 0 and (poly_sum < 0.85 or poly_sum > 1.15):
+        response["errors"].append(
+            f"Polymarket price sanity check failed: Up ({poly_up_cost:.3f}) + Down ({poly_down_cost:.3f}) = {poly_sum:.3f}, expected ~1.00"
+        )
+        return response
+
     kalshi_markets = kalshi_data.get('markets', [])
     
     # Ensure sorted by strike
@@ -72,8 +103,10 @@ def get_arbitrage_data():
         kalshi_strike = km['strike']
         kalshi_yes_cost = km['yes_ask'] / 100.0
         kalshi_no_cost = km['no_ask'] / 100.0
-        
-        # Only check markets within range (removed previous hardcoded range check)
+
+        # Skip markets with unpriced legs (0 = no quote available)
+        if km['yes_ask'] == 0 or km['no_ask'] == 0:
+            continue
             
         check_data = {
             "kalshi_strike": kalshi_strike,
@@ -118,6 +151,7 @@ def get_arbitrage_data():
             if check1["total_cost"] < 1.00:
                 check1["is_arbitrage"] = True
                 check1["margin"] = 1.00 - check1["total_cost"]
+                _add_fee_info(check1)
                 response["opportunities"].append(check1)
             response["checks"].append(check1)
             
@@ -133,6 +167,7 @@ def get_arbitrage_data():
             if check2["total_cost"] < 1.00:
                 check2["is_arbitrage"] = True
                 check2["margin"] = 1.00 - check2["total_cost"]
+                _add_fee_info(check2)
                 response["opportunities"].append(check2)
             response["checks"].append(check2)
             continue # Skip adding the base check_data
@@ -140,6 +175,7 @@ def get_arbitrage_data():
         if check_data["total_cost"] < 1.00:
             check_data["is_arbitrage"] = True
             check_data["margin"] = 1.00 - check_data["total_cost"]
+            _add_fee_info(check_data)
             response["opportunities"].append(check_data)
             
         response["checks"].append(check_data)

@@ -1,4 +1,5 @@
 import requests
+import json
 import time
 import datetime
 import pytz
@@ -11,10 +12,11 @@ BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
 SYMBOL = "BTCUSDT"
 
 CLOB_API_URL = "https://clob.polymarket.com/book"
+REQUEST_TIMEOUT = 10  # seconds
 
 def get_clob_price(token_id):
     try:
-        response = requests.get(CLOB_API_URL, params={"token_id": token_id})
+        response = requests.get(CLOB_API_URL, params={"token_id": token_id}, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         
@@ -40,7 +42,7 @@ def get_clob_price(token_id):
 def get_polymarket_data(slug):
     try:
         # 1. Get Event Details to find Token IDs
-        response = requests.get(POLYMARKET_API_URL, params={"slug": slug})
+        response = requests.get(POLYMARKET_API_URL, params={"slug": slug}, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         
@@ -56,8 +58,8 @@ def get_polymarket_data(slug):
         
         # Get Token IDs
         # clobTokenIds is a list of strings
-        clob_token_ids = eval(market.get("clobTokenIds", "[]"))
-        outcomes = eval(market.get("outcomes", "[]"))
+        clob_token_ids = json.loads(market.get("clobTokenIds", "[]"))
+        outcomes = json.loads(market.get("outcomes", "[]"))
         
         if len(clob_token_ids) != 2:
             return None, "Unexpected number of tokens"
@@ -72,15 +74,15 @@ def get_polymarket_data(slug):
             if price is not None:
                 prices[outcome] = price
             else:
-                prices[outcome] = 0.0
-            
+                return None, f"Failed to fetch CLOB price for {outcome} (token: {token_id})"
+
         return prices, None
     except Exception as e:
         return None, str(e)
 
 def get_binance_current_price():
     try:
-        response = requests.get(BINANCE_PRICE_URL, params={"symbol": SYMBOL})
+        response = requests.get(BINANCE_PRICE_URL, params={"symbol": SYMBOL}, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         return float(data["price"]), None
@@ -99,7 +101,7 @@ def get_binance_open_price(target_time_utc):
             "startTime": timestamp_ms,
             "limit": 1
         }
-        response = requests.get(BINANCE_KLINES_URL, params=params)
+        response = requests.get(BINANCE_KLINES_URL, params=params, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         

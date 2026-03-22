@@ -8,10 +8,11 @@ from get_current_markets import get_current_market_urls
 KALSHI_API_URL = "https://api.elections.kalshi.com/trade-api/v2/markets"
 BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price"
 SYMBOL = "BTCUSDT"
+REQUEST_TIMEOUT = 10  # seconds
 
 def get_binance_current_price():
     try:
-        response = requests.get(BINANCE_PRICE_URL, params={"symbol": SYMBOL})
+        response = requests.get(BINANCE_PRICE_URL, params={"symbol": SYMBOL}, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         return float(data["price"]), None
@@ -21,7 +22,7 @@ def get_binance_current_price():
 def get_kalshi_markets(event_ticker):
     try:
         params = {"limit": 100, "event_ticker": event_ticker}
-        response = requests.get(KALSHI_API_URL, params=params)
+        response = requests.get(KALSHI_API_URL, params=params, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         return data.get('markets', []), None
@@ -34,7 +35,7 @@ def parse_strike(subtitle):
     match = re.search(r'\$([\d,]+)', subtitle)
     if match:
         return float(match.group(1).replace(',', ''))
-    return 0.0
+    return None
 
 def fetch_kalshi_data_struct():
     """
@@ -57,13 +58,13 @@ def fetch_kalshi_data_struct():
             return None, f"Kalshi Error: {err}"
             
         if not markets:
-            return [], None
+            return {"event_ticker": event_ticker, "current_price": current_price, "markets": []}, None
             
         # Parse strikes and sort
         market_data = []
         for m in markets:
             strike = parse_strike(m.get('subtitle', ''))
-            if strike > 0:
+            if strike is not None and strike > 0:
                 market_data.append({
                     'strike': strike,
                     'yes_bid': m.get('yes_bid', 0),
