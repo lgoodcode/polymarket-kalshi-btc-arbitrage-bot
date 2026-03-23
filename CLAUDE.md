@@ -13,8 +13,10 @@ See `thesis.md` for the mathematical foundation.
 ```text
 External APIs (Polymarket, Kalshi, Binance)
         │
-        ├── fetch_current_polymarket.py   # Polymarket + Binance data
-        ├── fetch_current_kalshi.py       # Kalshi + Binance data
+        ├── fetch_current_polymarket.py   # Polymarket data (async)
+        ├── fetch_current_kalshi.py       # Kalshi data (async)
+        ├── binance.py                    # Shared Binance functions (async)
+        ├── http_utils.py                 # aiohttp session + retry logic
         │
         └── get_current_markets.py        # Coordinates market URLs/slugs
                 │
@@ -23,12 +25,23 @@ External APIs (Polymarket, Kalshi, Binance)
     api.py          arbitrage_bot.py
     (FastAPI :8000)  (CLI monitor)
         │
-    frontend/        (Next.js :3000, polls API every 1s)
+        ├── arbitrage.py   # Shared fee + comparison engine
+        ├── config.py      # Centralized config (env var overrides)
+        ├── log_config.py  # Logging setup (JSON file + console)
+        │
+    frontend/        (Next.js :3000, polls API every 5s)
 ```
 
-**Two interfaces** expose the same core arbitrage engine, but with different market selection behavior:
-- `api.py` — FastAPI server exposing `GET /arbitrage`, selects a strike window (±4) around the closest Kalshi market to the Polymarket strike (consumed by the frontend)
+**Two interfaces** expose the same core arbitrage engine (from `arbitrage.py`), with different market selection:
+- `api.py` — FastAPI server exposing `GET /arbitrage` + `GET /health`, selects a strike window (±4) around the closest Kalshi market to the Polymarket strike (consumed by the frontend). Includes server-side response caching.
 - `arbitrage_bot.py` — CLI tool that iterates all fetched Kalshi markets for headless monitoring, filtering only what it prints to the console
+
+**Shared modules:**
+- `arbitrage.py` — Fee estimation and arbitrage comparison logic (used by both api.py and arbitrage_bot.py)
+- `binance.py` — Single source of truth for Binance API calls (current price + kline open)
+- `http_utils.py` — aiohttp session creation, `fetch_json()` with retry + exponential backoff
+- `config.py` — All constants centralized, env var overrides, optional `.env` via python-dotenv
+- `log_config.py` — Python logging with rotating JSON file handler + console handler
 
 **URL generators** (pure functions):
 - `find_new_market.py` — Polymarket slug: `bitcoin-up-or-down-{month}-{day}-{hour}{am/pm}-et`
@@ -38,26 +51,33 @@ External APIs (Polymarket, Kalshi, Binance)
 
 | Layer    | Technology                                  |
 |----------|---------------------------------------------|
-| Backend  | Python 3.9+, FastAPI, Uvicorn, Requests     |
+| Backend  | Python 3.9+, FastAPI, Uvicorn, aiohttp, python-dotenv |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, shadcn/ui |
-| Testing  | pytest, pytest-mock, httpx, vcrpy            |
+| Testing  | pytest, pytest-asyncio, pytest-mock, httpx, aioresponses, vcrpy |
 
 ## Directory Structure
 
 ```text
 backend/
   api.py                        # FastAPI server (main entry point)
-  arbitrage_bot.py              # CLI bot with 1s polling loop
-  fetch_current_polymarket.py   # Polymarket + Binance data fetching
-  fetch_current_kalshi.py       # Kalshi + Binance data fetching
+  arbitrage_bot.py              # CLI bot with async polling loop
+  arbitrage.py                  # Shared arbitrage detection logic
+  binance.py                    # Shared Binance API functions (async)
+  config.py                     # Centralized configuration
+  http_utils.py                 # aiohttp session + retry logic
+  log_config.py                 # Logging configuration
+  fetch_current_polymarket.py   # Polymarket data fetching (async)
+  fetch_current_kalshi.py       # Kalshi data fetching (async)
   get_current_markets.py        # Market URL coordination
   find_new_market.py            # Polymarket slug generation
   find_new_kalshi_market.py     # Kalshi slug generation
   pyproject.toml                # pytest markers (integration, live)
-  requirements.txt
+  requirements.txt              # Production dependencies
+  requirements-dev.txt          # Dev/test dependencies
   tests/
     conftest.py                     # Shared fixtures and mock data
     test_api.py
+    test_arbitrage.py               # Tests for shared arbitrage module
     test_arbitrage_bot.py
     test_fetch_current_kalshi.py
     test_fetch_current_polymarket.py
@@ -83,8 +103,11 @@ frontend/
 ### Backend
 
 ```bash
-# Install dependencies
+# Install production dependencies
 cd backend && pip install -r requirements.txt
+
+# Install dev/test dependencies
+cd backend && pip install -r requirements-dev.txt
 
 # Run API server (localhost:8000)
 python api.py
@@ -145,18 +168,18 @@ npm run lint
 
 - **Style**: PEP 8
 - **Error pattern**: Functions return `(data, error_string)` tuples instead of raising exceptions. The API collects errors into a response array.
-- **HTTP requests**: In `fetch_current_*` modules, all external calls use `requests.get()` with `timeout=10`
-- **No `eval()` in new code**: Use `json.loads()` for parsing JSON strings; legacy scripts (e.g., `fetch_data.py`, `inspect_clob.py`) are temporary exceptions until refactored
+- **HTTP requests**: All external calls use `aiohttp` via `http_utils.fetch_json()` with retry + exponential backoff. Timeout configurable via `config.py` (default 10s).
+- **No `eval()`**: Use `json.loads()` for parsing JSON strings. Legacy files containing `eval()` have been deleted.
 - **Fee constants**: Polymarket 2% on profit, Kalshi 7% on profit
 - **Price sanity check**: Up + Down prices must be between 0.85 and 1.15; outside this range indicates stale data
-- **Console output**: Uses `print()` — no logging module
+- **Logging**: Python `logging` module with rotating JSON file handler (`logs/arbitrage.log`) + console handler. `print()` retained for CLI bot user-facing output alongside logging.
 
 ### TypeScript (Frontend)
 
 - **Components**: React functional components with hooks, `"use client"` directive
 - **Styling**: Tailwind CSS utility classes via shadcn/ui component library
 - **State**: `useState` for local state, no external state management
-- **Data fetching**: `setInterval` polling (1s) with `fetch` API against `localhost:8000`
+- **Data fetching**: `setInterval` polling (5s) with `fetch` API against configurable `NEXT_PUBLIC_API_URL` (default `localhost:8000`)
 
 ### Testing
 
@@ -178,7 +201,7 @@ npm run lint
 
 ## Common Pitfalls
 
-- Both `api.py` and `arbitrage_bot.py` contain parallel arbitrage logic — changes to comparison/fee logic must be updated in both files
+- Both `api.py` and `arbitrage_bot.py` share the core engine from `arbitrage.py` — changes to fee/comparison logic go there. The CLI bot still has its own display logic for print output.
 - Polymarket CLOB prices use best ask; Kalshi uses bid/ask spread — don't mix them
 - Timezone handling is critical: slugs use ET, internal logic uses UTC. Always use `pytz` for conversions
 - The Kalshi market offset (+1 hour) is intentional — their market windows differ from Polymarket's

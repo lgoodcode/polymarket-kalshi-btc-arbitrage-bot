@@ -1,114 +1,94 @@
-import time
+"""CLI arbitrage bot with async polling.
+
+Continuously scans for arbitrage opportunities and prints results.
+Uses the shared arbitrage engine from arbitrage.py.
+"""
+import asyncio
 import datetime
+import logging
+import uuid
+
 from fetch_current_polymarket import fetch_polymarket_data_struct
 from fetch_current_kalshi import fetch_kalshi_data_struct
+from arbitrage import estimate_fees, run_arbitrage_checks
+from http_utils import create_session
+from config import POLL_INTERVAL, PRICE_SUM_MIN, PRICE_SUM_MAX
+from log_config import setup_logging
 
-# Fee rates (approximate) — update these if platform fees change
-POLYMARKET_FEE_RATE = 0.02  # ~2% on winnings
-KALSHI_FEE_RATE = 0.07      # ~7% on profits
+setup_logging()
+logger = logging.getLogger(__name__)
 
-def _estimate_fees(poly_cost, kalshi_cost):
-    """Estimate trading fees for both legs."""
-    poly_fee = (1.00 - poly_cost) * POLYMARKET_FEE_RATE if poly_cost < 1.0 else 0
-    kalshi_fee = (1.00 - kalshi_cost) * KALSHI_FEE_RATE if kalshi_cost < 1.0 else 0
-    return round(poly_fee + kalshi_fee, 4)
+# Legacy alias for backward compatibility with tests
+_estimate_fees = estimate_fees
 
-def check_arbitrage():
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Scanning for arbitrage...")
-    
-    # Fetch Data
-    poly_data, poly_err = fetch_polymarket_data_struct()
-    kalshi_data, kalshi_err = fetch_kalshi_data_struct()
-    
+
+async def check_arbitrage():
+    scan_id = str(uuid.uuid4())[:8]
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Scanning for arbitrage... (scan:{scan_id})")
+
+    # Parallel fetch
+    session = await create_session()
+    try:
+        (poly_data, poly_err), (kalshi_data, kalshi_err) = await asyncio.gather(
+            fetch_polymarket_data_struct(session),
+            fetch_kalshi_data_struct(session),
+        )
+    finally:
+        await session.close()
+
     if poly_err:
         print(f"Polymarket Error: {poly_err}")
+        logger.error("Scan %s: Polymarket error: %s", scan_id, poly_err)
         return
     if kalshi_err:
         print(f"Kalshi Error: {kalshi_err}")
+        logger.error("Scan %s: Kalshi error: %s", scan_id, kalshi_err)
         return
-        
+
     if not poly_data or not kalshi_data:
         print("Missing data.")
         return
 
-    # Polymarket Data
-    poly_strike = poly_data['price_to_beat']
-    poly_up_cost = poly_data['prices'].get('Up', 0.0)
-    poly_down_cost = poly_data['prices'].get('Down', 0.0)
-    
+    poly_strike = poly_data["price_to_beat"]
+    poly_up_cost = poly_data["prices"].get("Up", 0.0)
+    poly_down_cost = poly_data["prices"].get("Down", 0.0)
+
     if poly_strike is None:
         print("Polymarket Strike is None")
         return
 
     print(f"POLYMARKET | Strike: ${poly_strike:,.2f} | Up: ${poly_up_cost:.3f} | Down: ${poly_down_cost:.3f}")
 
-    # Sanity check: Up + Down should be approximately $1.00 for a binary market
     poly_sum = poly_up_cost + poly_down_cost
-    if poly_sum > 0 and (poly_sum < 0.85 or poly_sum > 1.15):
+    if poly_sum > 0 and (poly_sum < PRICE_SUM_MIN or poly_sum > PRICE_SUM_MAX):
         print(f"WARNING: Polymarket prices may be stale/incorrect: Up + Down = ${poly_sum:.3f} (expected ~$1.00)")
         return
 
-    # Kalshi Data
-    kalshi_markets = kalshi_data['markets']
+    kalshi_markets = kalshi_data["markets"]
     if not kalshi_markets:
         print("No Kalshi markets found")
         return
-        
-    # Find relevant Kalshi markets (closest to Poly strike)
-    # We can check ALL of them, but let's focus on the ones around the Poly strike
-    # Actually, the user asked to compare Poly Strike vs Kalshi Strike 1, 2, 3.
-    # But "1, 2, 3" depends on which ones we fetched. 
-    # Let's iterate through ALL fetched Kalshi markets and check for arb.
-    
-    found_arb = False
-    
-    # Print header for Kalshi
-    # print("KALSHI MARKETS:")
-    
-    for km in kalshi_markets:
-        kalshi_strike = km['strike']
-        # Values are already in dollars (normalized by fetch_current_kalshi)
-        kalshi_yes_cost = km['yes_ask']
-        kalshi_no_cost = km['no_ask']
 
-        # Skip markets with unpriced legs (0 = no quote available)
+    found_arb = False
+
+    for km in kalshi_markets:
+        kalshi_strike = km["strike"]
+        kalshi_yes_cost = km["yes_ask"]
+        kalshi_no_cost = km["no_ask"]
+
         if kalshi_yes_cost == 0 or kalshi_no_cost == 0:
             continue
 
-        # Only print markets close to Poly strike to avoid spamming?
-        # Or print all? User said "show the data it is using".
-        # Let's print the ones within a reasonable range (e.g. +/- $2500)
         if abs(kalshi_strike - poly_strike) < 2500:
-             print(f"  KALSHI | Strike: ${kalshi_strike:,.2f} | Yes: ${kalshi_yes_cost:.2f} | No: ${kalshi_no_cost:.2f}")
-        
-        # Logic:
-        
-        # Logic:
-        # Polymarket "Up" means Price >= Poly_Strike
-        # Polymarket "Down" means Price < Poly_Strike
-        
-        # Kalshi "Yes" means Price >= Kalshi_Strike
-        # Kalshi "No" means Price < Kalshi_Strike
-        
-        # Case 1: Poly_Strike > Kalshi_Strike
-        # Range: [Kalshi_Strike, Poly_Strike)
-        # If Price is in this range:
-        #   - Poly is Down (Win)
-        #   - Kalshi is Yes (Win)
-        # Strategy: Buy Poly Down + Kalshi Yes
-        # If Price < Kalshi_Strike: Poly Down (Win), Kalshi Yes (Lose) -> 1 Win
-        # If Price >= Poly_Strike: Poly Down (Lose), Kalshi Yes (Win) -> 1 Win
-        # If Kalshi_Strike <= Price < Poly_Strike: Both Win -> 2 Wins
-        # So MINIMUM payout is $1.00.
-        # Risk Free if Cost(Poly Down) + Cost(Kalshi Yes) < 1.00
-        
+            print(f"  KALSHI | Strike: ${kalshi_strike:,.2f} | Yes: ${kalshi_yes_cost:.2f} | No: ${kalshi_no_cost:.2f}")
+
         if poly_strike > kalshi_strike:
             total_cost = poly_down_cost + kalshi_yes_cost
             print(f"    [Poly > Kalshi] Checking: Poly Down (${poly_down_cost:.3f}) + Kalshi Yes (${kalshi_yes_cost:.3f}) = ${total_cost:.3f}")
-            
+
             if total_cost < 1.00:
                 margin = 1.00 - total_cost
-                est_fees = _estimate_fees(poly_down_cost, kalshi_yes_cost)
+                est_fees = estimate_fees(poly_down_cost, kalshi_yes_cost)
                 print(f"!!! ARBITRAGE FOUND !!!")
                 print(f"Type: Poly Strike ({poly_strike}) > Kalshi Strike ({kalshi_strike})")
                 print(f"Strategy: Buy Poly DOWN + Kalshi YES")
@@ -116,16 +96,16 @@ def check_arbitrage():
                 print(f"Min Payout: $1.00")
                 print(f"Risk-Free Profit: ${margin:.3f} per unit")
                 print(f"Est. Fees: ${est_fees:.4f} | After Fees: ${margin - est_fees:.4f} {'(PROFITABLE)' if margin > est_fees else '(NOT PROFITABLE)'}")
+                logger.info("Scan %s: ARB FOUND Poly>Kalshi cost=%.3f margin=%.3f", scan_id, total_cost, margin)
                 found_arb = True
 
-        # Case 2: Poly_Strike < Kalshi_Strike
         elif poly_strike < kalshi_strike:
             total_cost = poly_up_cost + kalshi_no_cost
             print(f"    [Poly < Kalshi] Checking: Poly Up (${poly_up_cost:.3f}) + Kalshi No (${kalshi_no_cost:.3f}) = ${total_cost:.3f}")
 
             if total_cost < 1.00:
                 margin = 1.00 - total_cost
-                est_fees = _estimate_fees(poly_up_cost, kalshi_no_cost)
+                est_fees = estimate_fees(poly_up_cost, kalshi_no_cost)
                 print(f"!!! ARBITRAGE FOUND !!!")
                 print(f"Type: Poly Strike ({poly_strike}) < Kalshi Strike ({kalshi_strike})")
                 print(f"Strategy: Buy Poly UP + Kalshi NO")
@@ -133,17 +113,16 @@ def check_arbitrage():
                 print(f"Min Payout: $1.00")
                 print(f"Risk-Free Profit: ${margin:.3f} per unit")
                 print(f"Est. Fees: ${est_fees:.4f} | After Fees: ${margin - est_fees:.4f} {'(PROFITABLE)' if margin > est_fees else '(NOT PROFITABLE)'}")
+                logger.info("Scan %s: ARB FOUND Poly<Kalshi cost=%.3f margin=%.3f", scan_id, total_cost, margin)
                 found_arb = True
-                
-        # Case 3: Poly_Strike == Kalshi_Strike
+
         elif poly_strike == kalshi_strike:
-            # Check Pair 1: Poly Down + Kalshi Yes
             cost1 = poly_down_cost + kalshi_yes_cost
             print(f"    [Poly == Kalshi] Checking: Poly Down (${poly_down_cost:.3f}) + Kalshi Yes (${kalshi_yes_cost:.3f}) = ${cost1:.3f}")
-            
+
             if cost1 < 1.00:
                 margin = 1.00 - cost1
-                est_fees = _estimate_fees(poly_down_cost, kalshi_yes_cost)
+                est_fees = estimate_fees(poly_down_cost, kalshi_yes_cost)
                 print(f"!!! ARBITRAGE FOUND !!!")
                 print(f"Type: Equal Strikes ({poly_strike})")
                 print(f"Strategy: Buy Poly DOWN + Kalshi YES")
@@ -151,14 +130,13 @@ def check_arbitrage():
                 print(f"Risk-Free Profit: ${margin:.3f} per unit")
                 print(f"Est. Fees: ${est_fees:.4f} | After Fees: ${margin - est_fees:.4f} {'(PROFITABLE)' if margin > est_fees else '(NOT PROFITABLE)'}")
                 found_arb = True
-                
-            # Check Pair 2: Poly Up + Kalshi No
+
             cost2 = poly_up_cost + kalshi_no_cost
             print(f"    [Poly == Kalshi] Checking: Poly Up (${poly_up_cost:.3f}) + Kalshi No (${kalshi_no_cost:.3f}) = ${cost2:.3f}")
-            
+
             if cost2 < 1.00:
                 margin = 1.00 - cost2
-                est_fees = _estimate_fees(poly_up_cost, kalshi_no_cost)
+                est_fees = estimate_fees(poly_up_cost, kalshi_no_cost)
                 print(f"!!! ARBITRAGE FOUND !!!")
                 print(f"Type: Equal Strikes ({poly_strike})")
                 print(f"Strategy: Buy Poly UP + Kalshi NO")
@@ -171,19 +149,25 @@ def check_arbitrage():
         print("No risk-free arbitrage found.")
     print("-" * 50)
 
+
 def main():
     print("Starting Arbitrage Bot...")
     print("Press Ctrl+C to stop.")
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     while True:
         try:
-            check_arbitrage()
-            time.sleep(1)
+            loop.run_until_complete(check_arbitrage())
+            loop.run_until_complete(asyncio.sleep(POLL_INTERVAL))
         except KeyboardInterrupt:
             print("\nStopping...")
             break
         except Exception as e:
             print(f"Error: {e}")
-            time.sleep(1)
+            logger.exception("Unexpected error in main loop")
+            loop.run_until_complete(asyncio.sleep(POLL_INTERVAL))
+    loop.close()
+
 
 if __name__ == "__main__":
     main()

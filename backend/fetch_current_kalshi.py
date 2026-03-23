@@ -1,147 +1,144 @@
-import requests
-import datetime
-import pytz
+"""Fetch current Kalshi market data (async).
+
+Retrieves BTC event markets from the Kalshi API and current price from Binance.
+"""
 import re
+import logging
+import aiohttp
 from get_current_markets import get_current_market_urls
+from http_utils import fetch_json, create_session
+from binance import get_binance_current_price
+from config import KALSHI_API_URL
 
-# Configuration
-KALSHI_API_URL = "https://api.elections.kalshi.com/trade-api/v2/markets"
-BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price"
-SYMBOL = "BTCUSDT"
-REQUEST_TIMEOUT = 10  # seconds
+logger = logging.getLogger(__name__)
 
-def get_binance_current_price():
-    try:
-        response = requests.get(BINANCE_PRICE_URL, params={"symbol": SYMBOL}, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        data = response.json()
-        return float(data["price"]), None
-    except Exception as e:
-        return None, str(e)
 
-def get_kalshi_markets(event_ticker):
+async def get_kalshi_markets(session: aiohttp.ClientSession, event_ticker: str):
+    """Fetch Kalshi markets for an event ticker. Returns (markets_list, error)."""
     try:
         params = {"limit": 100, "event_ticker": event_ticker}
-        response = requests.get(KALSHI_API_URL, params=params, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        data = response.json()
-        return data.get('markets', []), None
+        data = await fetch_json(session, KALSHI_API_URL, params=params)
+        return data.get("markets", []), None
     except Exception as e:
         return None, str(e)
 
-def parse_strike(subtitle):
-    # Format: "$96,250 or above"
-    # Extract number, remove commas
+
+def parse_strike(subtitle: str):
+    """
+    Extract strike price from a Kalshi subtitle like "$96,250 or above".
+
+    Returns float or None. Logs a warning when parsing fails (SEC-013).
+    """
     match = re.search(r'\$([\d,]+)', subtitle)
     if match:
-        return float(match.group(1).replace(',', ''))
+        return float(match.group(1).replace(",", ""))
+    logger.warning("Failed to parse strike from subtitle: %r", subtitle)
     return None
 
-def fetch_kalshi_data_struct():
+
+async def fetch_kalshi_data_struct(session: aiohttp.ClientSession = None):
     """
-    Fetches current Kalshi markets and returns a list of market dictionaries.
+    Fetch current Kalshi markets. Returns (data_dict, error_string).
+
+    Binance price is fetched here for standalone use. When called from
+    api.py, the shared Binance price is passed separately.
     """
+    own_session = session is None
+    if own_session:
+        session = await create_session()
     try:
-        # Get current market info
         market_info = get_current_market_urls()
         kalshi_url = market_info["kalshi"]
-        
-        # Extract event ticker from URL
         event_ticker = kalshi_url.split("/")[-1].upper()
-        
-        # Fetch Current BTC Price
-        current_price, err = get_binance_current_price()
-        
-        # Fetch Kalshi Markets
-        markets, err = get_kalshi_markets(event_ticker)
+
+        current_price, _ = await get_binance_current_price(session)
+
+        markets, err = await get_kalshi_markets(session, event_ticker)
         if err:
             return None, f"Kalshi Error: {err}"
-            
+
         if not markets:
             return {"event_ticker": event_ticker, "current_price": current_price, "markets": []}, None
-            
-        # Parse strikes and sort
+
         market_data = []
         for m in markets:
-            strike = parse_strike(m.get('subtitle', ''))
+            strike = parse_strike(m.get("subtitle", ""))
             if strike is not None and strike > 0:
-                # Kalshi API returns *_dollars fields as strings (e.g. "0.5600")
-                # since March 12, 2026 migration from legacy integer cent fields.
-                # Also support legacy integer cent fields for backward compatibility.
-                if 'yes_ask_dollars' in m:
-                    yes_bid = float(m.get('yes_bid_dollars', '0'))
-                    yes_ask = float(m.get('yes_ask_dollars', '0'))
-                    no_bid = float(m.get('no_bid_dollars', '0'))
-                    no_ask = float(m.get('no_ask_dollars', '0'))
+                # Kalshi API returns *_dollars fields as strings (post-March 2026)
+                if "yes_ask_dollars" in m:
+                    yes_bid = float(m.get("yes_bid_dollars", "0"))
+                    yes_ask = float(m.get("yes_ask_dollars", "0"))
+                    no_bid = float(m.get("no_bid_dollars", "0"))
+                    no_ask = float(m.get("no_ask_dollars", "0"))
                 else:
                     # Legacy integer cent fields (pre-March 2026)
-                    yes_bid = m.get('yes_bid', 0) / 100.0
-                    yes_ask = m.get('yes_ask', 0) / 100.0
-                    no_bid = m.get('no_bid', 0) / 100.0
-                    no_ask = m.get('no_ask', 0) / 100.0
+                    yes_bid = m.get("yes_bid", 0) / 100.0
+                    yes_ask = m.get("yes_ask", 0) / 100.0
+                    no_bid = m.get("no_bid", 0) / 100.0
+                    no_ask = m.get("no_ask", 0) / 100.0
                 market_data.append({
-                    'strike': strike,
-                    'yes_bid': yes_bid,
-                    'yes_ask': yes_ask,
-                    'no_bid': no_bid,
-                    'no_ask': no_ask,
-                    'subtitle': m.get('subtitle')
+                    "strike": strike,
+                    "yes_bid": yes_bid,
+                    "yes_ask": yes_ask,
+                    "no_bid": no_bid,
+                    "no_ask": no_ask,
+                    "subtitle": m.get("subtitle"),
                 })
-                
-        # Sort by strike price
-        market_data.sort(key=lambda x: x['strike'])
-        
+
+        market_data.sort(key=lambda x: x["strike"])
+
         return {
             "event_ticker": event_ticker,
             "current_price": current_price,
-            "markets": market_data
+            "markets": market_data,
         }, None
-        
+
     except Exception as e:
         return None, str(e)
+    finally:
+        if own_session:
+            await session.close()
 
-def main():
-    data, err = fetch_kalshi_data_struct()
-    
+
+async def main():
+    data, err = await fetch_kalshi_data_struct()
+
     if err:
         print(f"Error: {err}")
         return
-        
+
     print(f"Fetching data for Event: {data['event_ticker']}")
-    if data['current_price']:
+    if data["current_price"]:
         print(f"CURRENT PRICE: ${data['current_price']:,.2f}")
-    
-    market_data = data['markets']
+
+    market_data = data["markets"]
     if not market_data:
         print("No markets found.")
         return
 
-    # Find the market closest to current price for display
-    current_price = data['current_price'] or 0
+    current_price = data["current_price"] or 0
     closest_idx = 0
-    min_diff = float('inf')
-    
+    min_diff = float("inf")
     for i, m in enumerate(market_data):
-        diff = abs(m['strike'] - current_price)
+        diff = abs(m["strike"] - current_price)
         if diff < min_diff:
             min_diff = diff
             closest_idx = i
-            
-    # Select 3 markets
+
     start_idx = max(0, closest_idx - 1)
     end_idx = min(len(market_data), start_idx + 3)
-    
     if end_idx - start_idx < 3 and start_idx > 0:
         start_idx = max(0, end_idx - 3)
-        
+
     selected_markets = market_data[start_idx:end_idx]
-    
-    # Print Data
+
     print("-" * 30)
     for i, m in enumerate(selected_markets):
-        print(f"PRICE TO BEAT {i+1}: {m['subtitle']}")
-        print(f"BUY YES PRICE {i+1}: ${m['yes_ask']:.2f}, BUY NO PRICE {i+1}: ${m['no_ask']:.2f}")
+        print(f"PRICE TO BEAT {i + 1}: {m['subtitle']}")
+        print(f"BUY YES PRICE {i + 1}: ${m['yes_ask']:.2f}, BUY NO PRICE {i + 1}: ${m['no_ask']:.2f}")
         print()
 
+
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
