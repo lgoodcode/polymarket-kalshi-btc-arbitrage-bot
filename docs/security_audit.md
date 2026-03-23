@@ -18,7 +18,7 @@ This bot monitors BTC binary options markets on Polymarket and Kalshi to identif
 Despite being detection-only, several findings pose real risk:
 
 - **Data integrity issues** (stale prices, no depth check) could cause a user to act on phantom signals and lose money
-- **A legacy file contains `eval()` on untrusted API data** — arbitrary code execution risk on your machine
+- **Legacy files contain `eval()` on untrusted API data** — arbitrary code execution risk on your machine
 - **No retry logic or rate-limit handling** means the bot will go blind during peak opportunities
 - **No persistent logging** means you can't audit what happened after the fact
 
@@ -30,7 +30,7 @@ Despite being detection-only, several findings pose real risk:
 
 | ID | Severity | Status | Title | Personal Use? |
 |----|----------|--------|-------|---------------|
-| SEC-001 | CRITICAL | OPEN | `eval()` code injection in legacy file | YES — runs on your machine |
+| SEC-001 | CRITICAL | OPEN | `eval()` code injection in legacy files | YES — runs on your machine |
 | SEC-002 | CRITICAL | OPEN | No order book depth/liquidity verification | YES — you'd act on unexecutable signals |
 | SEC-003 | CRITICAL | OPEN | Sequential fetching creates stale-price risk | YES — phantom arbitrage signals |
 | SEC-004 | HIGH | OPEN | CORS wildcard allows all origins | LOW locally, YES on VPS with open port |
@@ -47,7 +47,7 @@ Despite being detection-only, several findings pose real risk:
 | SEC-015 | MEDIUM | OPEN | No health check endpoint | Only matters for VPS deployment |
 | SEC-016 | LOW | OPEN | Unused `httpx` dependency | Minimal risk |
 | SEC-017 | LOW | OPEN | No request ID or correlation tracking | Quality-of-life |
-| SEC-018 | LOW | OPEN | Legacy `fetch_data.py` still in repository | YES — contains eval() vulnerability |
+| SEC-018 | LOW | OPEN | Legacy files still in repository | YES — contain eval() vulnerability |
 
 ---
 
@@ -55,14 +55,18 @@ Despite being detection-only, several findings pose real risk:
 
 ### CRITICAL
 
-#### SEC-001: `eval()` Code Injection in Legacy File
+#### SEC-001: `eval()` Code Injection in Legacy Files
 
-- **File:** `backend/fetch_data.py` lines 31-32
+- **Files:** `backend/fetch_data.py` lines 31-32, `backend/inspect_clob.py` line 23
 - **Relevant for personal use:** YES
 
 ```python
+# fetch_data.py
 outcomes = eval(market.get("outcomes", "[]"))          # Line 31
 outcome_prices = eval(market.get("outcomePrices", "[]"))  # Line 32
+
+# inspect_clob.py
+token_ids = eval(data[0]['markets'][0]['clobTokenIds'])    # Line 23
 ```
 
 **Risk:** `eval()` executes arbitrary Python code. If the Polymarket API is compromised, returns unexpected data, or a DNS hijack redirects the request, the response payload is executed as code on your machine. This could lead to:
@@ -71,12 +75,13 @@ outcome_prices = eval(market.get("outcomePrices", "[]"))  # Line 32
 - Reverse shell / remote access
 - Cryptocurrency wallet theft
 
-**Mitigating factor:** The active code in `fetch_current_polymarket.py` uses `json.loads()` (safe). But `fetch_data.py` is still importable and could be accidentally invoked.
+**Mitigating factor:** The active code in `fetch_current_polymarket.py` uses `json.loads()` (safe). But `fetch_data.py` and `inspect_clob.py` are still importable and could be accidentally invoked.
 
-**Recommendation:** Delete `fetch_data.py` or replace `eval()` with `json.loads()`.
+**Recommendation:** Delete legacy files or replace all `eval()` calls with `json.loads()`.
 
 **Resolution:**
 - [ ] Remove or fix `fetch_data.py`
+- [ ] Remove or fix `inspect_clob.py`
 
 ---
 
@@ -93,7 +98,7 @@ The bot uses `best_ask` price from the CLOB order book but does not check:
 **Risk:** You see "ARBITRAGE FOUND — $0.02 profit" but there's only $1 of volume at that price. You cannot actually execute the trade, or you get partially filled at a worse price (slippage).
 
 **Example scenario:**
-```
+```text
 Best ask for Poly Down: $0.470 (but only 5 contracts available)
 Best ask for Kalshi Yes: $0.420 (but only 2 contracts available)
 You want to buy 100 contracts → actual fill price much higher → loss
@@ -420,17 +425,18 @@ Each scan cycle has no unique identifier. If you're reviewing logs, you can't co
 
 ---
 
-#### SEC-018: Legacy `fetch_data.py` Still in Repository
+#### SEC-018: Legacy Files Still in Repository
 
-- **File:** `backend/fetch_data.py`
+- **Files:** `backend/fetch_data.py`, `backend/inspect_clob.py`
 - **Relevant for personal use:** YES (contains SEC-001 vulnerability)
 
-This file contains the dangerous `eval()` calls (SEC-001) and hardcoded timestamps from November 2025. It appears to be an older version superseded by `fetch_current_polymarket.py`.
+Both files contain dangerous `eval()` calls (SEC-001). `fetch_data.py` has hardcoded timestamps from November 2025 and appears superseded by `fetch_current_polymarket.py`. `inspect_clob.py` is a debugging/inspection script that also uses `eval()` on API response data.
 
-**Recommendation:** Delete the file entirely, or add a prominent deprecation warning and remove the `eval()` calls.
+**Recommendation:** Delete both files entirely, or add prominent deprecation warnings and replace all `eval()` calls with `json.loads()`.
 
 **Resolution:**
-- [ ] Delete `fetch_data.py` or neutralize `eval()` usage
+- [ ] Delete or neutralize `fetch_data.py`
+- [ ] Delete or neutralize `inspect_clob.py`
 
 ---
 
@@ -478,9 +484,21 @@ If this bot is ever extended to actually place orders, the following safeguards 
 
 Track fixes here as they are applied:
 
-| Date | Finding ID | Action Taken | Commit |
-|------|-----------|--------------|--------|
-| 2026-03-23 | — | Initial audit completed | — |
+| Date | Finding ID | Action Taken | Verification | Commit |
+|------|-----------|--------------|--------------|--------|
+| 2026-03-23 | — | Initial audit completed | — | — |
+
+### Verification Commands
+
+Use these commands to verify specific findings have been resolved:
+
+| Finding | Verification Command |
+|---------|---------------------|
+| SEC-001 | `grep -rn 'eval(' backend/ --include='*.py' \| grep -v test \| grep -v __pycache__` — should return no results |
+| SEC-004 | `grep -n 'allow_origins' backend/api.py` — should not contain `"*"` |
+| SEC-011 | `grep -rn 'def get_binance_current_price' backend/ --include='*.py' \| grep -v test` — should return exactly 1 result |
+| SEC-012 | `grep -rn 'get_binance_current_price()' backend/ --include='*.py' \| grep -v test` — should return exactly 1 call site |
+| SEC-018 | `ls backend/fetch_data.py backend/inspect_clob.py 2>&1` — files should not exist |
 
 ---
 
