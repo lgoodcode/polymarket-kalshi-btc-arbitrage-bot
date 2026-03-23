@@ -24,9 +24,9 @@ External APIs (Polymarket, Kalshi, Binance)
     frontend/        (Next.js :3000, polls API every 1s)
 ```
 
-**Two interfaces** serve the same arbitrage logic:
-- `api.py` — FastAPI server exposing `GET /arbitrage`, consumed by the frontend
-- `arbitrage_bot.py` — CLI tool for headless monitoring with console output
+**Two interfaces** expose the same core arbitrage engine, but with different market selection behavior:
+- `api.py` — FastAPI server exposing `GET /arbitrage`, selects a strike window (±4) around the closest Kalshi market to the Polymarket strike (consumed by the frontend)
+- `arbitrage_bot.py` — CLI tool that iterates all fetched Kalshi markets for headless monitoring, filtering only what it prints to the console
 
 **URL generators** (pure functions):
 - `find_new_market.py` — Polymarket slug: `bitcoin-up-or-down-{month}-{day}-{hour}{am/pm}-et`
@@ -53,14 +53,14 @@ backend/
   find_new_kalshi_market.py     # Kalshi slug generation
   requirements.txt
   tests/
-    conftest.py                 # Shared fixtures and mock data
-    test_api.py                 # 28 tests
-    test_arbitrage_bot.py       # 22 tests
-    test_fetch_current_kalshi.py    # 18 tests
-    test_fetch_current_polymarket.py # 22 tests
-    test_find_new_market.py         # 14 tests
-    test_find_new_kalshi_market.py  # 11 tests
-    test_get_current_markets.py     # 6 tests
+    conftest.py                     # Shared fixtures and mock data
+    test_api.py
+    test_arbitrage_bot.py
+    test_fetch_current_kalshi.py
+    test_fetch_current_polymarket.py
+    test_find_new_market.py
+    test_find_new_kalshi_market.py
+    test_get_current_markets.py
 
 frontend/
   app/
@@ -116,8 +116,8 @@ npm run lint
 
 - **Style**: PEP 8
 - **Error pattern**: Functions return `(data, error_string)` tuples instead of raising exceptions. The API collects errors into a response array.
-- **HTTP requests**: All external calls use a 10-second timeout
-- **No `eval()`**: Use `json.loads()` for parsing JSON strings
+- **HTTP requests**: In `fetch_current_*` modules and new backend code, all external calls use a 10-second timeout
+- **No `eval()` in new code**: For JSON parsing, use `json.loads()` instead of `eval()`; legacy scripts (e.g., `fetch_data.py`, `inspect_clob.py`) are temporary exceptions until refactored
 - **Fee constants**: Polymarket 2% on profit, Kalshi 7% on profit
 - **Price sanity check**: Up + Down prices must be between 0.85 and 1.15; outside this range indicates stale data
 
@@ -152,13 +152,40 @@ npm run lint
 ```json
 {
   "timestamp": "ISO string",
-  "polymarket": { "price_to_beat": 97000, "current_price": 96850, "prices": {"Up": 0.55, "Down": 0.45}, "slug": "..." },
-  "kalshi": { "event_ticker": "...", "current_price": 96850, "markets": [{"strike": 97000, "yes_bid": 0.40, ...}] },
-  "checks": [{ "poly_strike": 97000, "kalshi_strike": 97000, "poly_leg": "Down", "kalshi_leg": "Yes", "total_cost": 0.85, ... }],
+  "polymarket": {
+    "price_to_beat": 97000,
+    "current_price": 96850,
+    "prices": { "Up": 0.55, "Down": 0.45 },
+    "slug": "..."
+  },
+  "kalshi": {
+    "event_ticker": "...",
+    "current_price": 96850,
+    "markets": [
+      { "strike": 97000, "yes_bid": 38, "yes_ask": 42, "no_bid": 58, "no_ask": 62, "subtitle": "..." }
+    ]
+  },
+  "checks": [
+    {
+      "kalshi_strike": 97000,
+      "kalshi_yes": 0.42,
+      "kalshi_no": 0.62,
+      "type": "Poly > Kalshi",
+      "poly_leg": "Down",
+      "kalshi_leg": "Yes",
+      "poly_cost": 0.45,
+      "kalshi_cost": 0.42,
+      "total_cost": 0.87,
+      "is_arbitrage": false,
+      "margin": 0
+    }
+  ],
   "opportunities": [],
   "errors": []
 }
 ```
+
+Note: Kalshi market prices (`yes_bid`, `yes_ask`, etc.) are in **cents**. The `checks` entries convert these to dollars (e.g., `kalshi_cost = yes_ask / 100`).
 
 ## Common Pitfalls
 
