@@ -340,17 +340,19 @@ RUN_LIVE_TESTS=1 pytest tests/ -m live -v
 4. **Existing 121 unit tests** — solid foundation to build integration tests on top of
 
 ### Risks & Concerns
-1. **API URL used for Kalshi may be stale** — code uses `api.elections.kalshi.com` but Kalshi's official production API is at `trading-api.kalshi.com`. This should be verified.
-2. **No retry/backoff logic** — a single failed API call fails the entire pipeline; integration tests should verify graceful degradation
-3. **Time-dependent slug generation** — tests must freeze time to be deterministic
-4. **Market availability** — live tests only work when BTC hourly markets are active on both platforms
-5. **Proxy/firewall restrictions** — CI environments may block outbound HTTPS (as observed in this environment); live tests must handle this gracefully
+1. **CRITICAL: Kalshi integer cents fields being removed (March 12, 2026)** — Kalshi is migrating from legacy integer fields (`yes_bid`, `yes_ask`, `no_bid`, `no_ask` in cents) to new `_fp` (fixed-point) and `_dollars` variants. The bot reads the legacy fields in `fetch_current_kalshi.py:68-73`. This may already be broken or will break imminently. Must verify and migrate to new field names.
+2. **Kalshi subpenny pricing** — As of March 9, 2026, Kalshi supports fractional pricing on select markets (`fractional_trading_enabled` flag). The bot's cents-to-dollars conversion (`/ 100.0`) may need updating.
+3. **Kalshi API URL is fine** — `api.elections.kalshi.com` works for all markets (not just elections), confirmed as a valid production endpoint alongside `trading-api.kalshi.com`.
+4. **No retry/backoff logic** — a single failed API call fails the entire pipeline; integration tests should verify graceful degradation.
+5. **Time-dependent slug generation** — tests must freeze time to be deterministic.
+6. **Market availability** — live tests only work when BTC hourly markets are active on both platforms.
+7. **Proxy/firewall restrictions** — CI environments may block outbound HTTPS (as observed in this environment); live tests must handle this gracefully.
 
 ### API Schema Stability
 - **Binance:** Very stable v3 API, rarely changes
-- **Polymarket Gamma:** Relatively stable, community-supported
-- **Polymarket CLOB:** Active development, potential breaking changes
-- **Kalshi v2:** Current production version; documented at `docs.kalshi.com`
+- **Polymarket Gamma:** Relatively stable, community-supported; rate limit ~4,000 req/10s
+- **Polymarket CLOB:** Active development, potential breaking changes; rate limit ~15,000 req/10s general, 50 req/10s for `/book`
+- **Kalshi v2:** Active breaking changes in March 2026 (fixed-point migration, subpenny pricing, fractional trading). Historical data now partitioned into live/historical tiers.
 
 ---
 
