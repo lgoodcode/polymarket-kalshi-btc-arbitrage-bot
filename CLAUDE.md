@@ -78,3 +78,34 @@ cd frontend && npm run dev
 - All HTTP calls use `requests.get()` with `timeout=10`
 - No logging module — uses `print()` for console output
 - Prices are in dollars (0.00-1.00 range) after normalization
+
+## Documentation
+
+### Active docs (repo root)
+
+| File | Purpose |
+|------|---------|
+| `README.md` | Project overview, setup, how it works |
+| `CONTRIBUTING.md` | Contribution guidelines, dev setup, test commands |
+| `CLAUDE.md` | AI assistant context (this file) |
+| `USAGE.md` | End-user guide: running the bot, understanding output |
+| `thesis.md` | Arbitrage theory and math |
+| `TEST_COVERAGE_ANALYSIS.md` | Living doc: test inventory, gaps, recommendations |
+
+### Archived docs (`docs/archive/`)
+
+Docs that have served their purpose get moved to `docs/archive/` to keep the repo root clean. These are kept for historical reference but are no longer actively maintained.
+
+| File | Why archived |
+|------|-------------|
+| `REVIEW_PROMPT.md` | One-time code review checklist; all issues (K1-K9) resolved |
+| `PR_SUMMARY.md` | Summary of a specific past PR; historical |
+| `TEST_PLAN.md` | Original test plan with estimates; superseded by actual tests |
+| `E2E_TESTING_REVIEW.md` | E2E testing proposal; fully implemented |
+
+### Archiving convention
+
+When a doc becomes obsolete (proposal implemented, one-time task completed, superseded by newer doc):
+1. `git mv <doc>.md docs/archive/`
+2. Update the tables above in this file
+3. Do NOT delete — archive preserves history without cluttering the root
