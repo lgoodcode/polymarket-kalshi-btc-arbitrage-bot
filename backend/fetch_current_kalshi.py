@@ -65,12 +65,26 @@ def fetch_kalshi_data_struct():
         for m in markets:
             strike = parse_strike(m.get('subtitle', ''))
             if strike is not None and strike > 0:
+                # Kalshi API returns *_dollars fields as strings (e.g. "0.5600")
+                # since March 12, 2026 migration from legacy integer cent fields.
+                # Also support legacy integer cent fields for backward compatibility.
+                if 'yes_ask_dollars' in m:
+                    yes_bid = float(m.get('yes_bid_dollars', '0'))
+                    yes_ask = float(m.get('yes_ask_dollars', '0'))
+                    no_bid = float(m.get('no_bid_dollars', '0'))
+                    no_ask = float(m.get('no_ask_dollars', '0'))
+                else:
+                    # Legacy integer cent fields (pre-March 2026)
+                    yes_bid = m.get('yes_bid', 0) / 100.0
+                    yes_ask = m.get('yes_ask', 0) / 100.0
+                    no_bid = m.get('no_bid', 0) / 100.0
+                    no_ask = m.get('no_ask', 0) / 100.0
                 market_data.append({
                     'strike': strike,
-                    'yes_bid': m.get('yes_bid', 0),
-                    'yes_ask': m.get('yes_ask', 0),
-                    'no_bid': m.get('no_bid', 0),
-                    'no_ask': m.get('no_ask', 0),
+                    'yes_bid': yes_bid,
+                    'yes_ask': yes_ask,
+                    'no_bid': no_bid,
+                    'no_ask': no_ask,
                     'subtitle': m.get('subtitle')
                 })
                 
@@ -126,7 +140,7 @@ def main():
     print("-" * 30)
     for i, m in enumerate(selected_markets):
         print(f"PRICE TO BEAT {i+1}: {m['subtitle']}")
-        print(f"BUY YES PRICE {i+1}: {m['yes_ask']}c, BUY NO PRICE {i+1}: {m['no_ask']}c")
+        print(f"BUY YES PRICE {i+1}: ${m['yes_ask']:.2f}, BUY NO PRICE {i+1}: ${m['no_ask']:.2f}")
         print()
 
 if __name__ == "__main__":

@@ -98,9 +98,9 @@ def sample_kalshi_data():
         "event_ticker": "KXBTCD-26MAR2215",
         "current_price": 95500.0,
         "markets": [
-            {"strike": 94000.0, "yes_bid": 85, "yes_ask": 87, "no_bid": 12, "no_ask": 14, "subtitle": "$94,000 or above"},
-            {"strike": 95000.0, "yes_bid": 50, "yes_ask": 52, "no_bid": 47, "no_ask": 49, "subtitle": "$95,000 or above"},
-            {"strike": 96000.0, "yes_bid": 20, "yes_ask": 22, "no_bid": 77, "no_ask": 79, "subtitle": "$96,000 or above"},
+            {"strike": 94000.0, "yes_bid": 0.85, "yes_ask": 0.87, "no_bid": 0.12, "no_ask": 0.14, "subtitle": "$94,000 or above"},
+            {"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.52, "no_bid": 0.47, "no_ask": 0.49, "subtitle": "$95,000 or above"},
+            {"strike": 96000.0, "yes_bid": 0.20, "yes_ask": 0.22, "no_bid": 0.77, "no_ask": 0.79, "subtitle": "$96,000 or above"},
         ]
     }
 
@@ -112,9 +112,9 @@ def sample_kalshi_data_with_unpriced():
         "event_ticker": "KXBTCD-26MAR2215",
         "current_price": 95500.0,
         "markets": [
-            {"strike": 94000.0, "yes_bid": 85, "yes_ask": 87, "no_bid": 12, "no_ask": 14, "subtitle": "$94,000 or above"},
+            {"strike": 94000.0, "yes_bid": 0.85, "yes_ask": 0.87, "no_bid": 0.12, "no_ask": 0.14, "subtitle": "$94,000 or above"},
             {"strike": 95000.0, "yes_bid": 0, "yes_ask": 0, "no_bid": 0, "no_ask": 0, "subtitle": "$95,000 or above"},
-            {"strike": 96000.0, "yes_bid": 20, "yes_ask": 22, "no_bid": 77, "no_ask": 79, "subtitle": "$96,000 or above"},
+            {"strike": 96000.0, "yes_bid": 0.20, "yes_ask": 0.22, "no_bid": 0.77, "no_ask": 0.79, "subtitle": "$96,000 or above"},
         ]
     }
 
@@ -138,6 +138,6 @@ def arb_kalshi_data():
         "event_ticker": "KXBTCD-26MAR2215",
         "current_price": 95500.0,
         "markets": [
-            {"strike": 94000.0, "yes_bid": 40, "yes_ask": 42, "no_bid": 55, "no_ask": 58, "subtitle": "$94,000 or above"},
+            {"strike": 94000.0, "yes_bid": 0.40, "yes_ask": 0.42, "no_bid": 0.55, "no_ask": 0.58, "subtitle": "$94,000 or above"},
         ]
     }

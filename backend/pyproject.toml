@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+markers = [
+    "integration: mock-based integration tests (full pipeline)",
+    "live: tests that hit real external APIs (skip by default)",
+]
+testpaths = ["tests"]

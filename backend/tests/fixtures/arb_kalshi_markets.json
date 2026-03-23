@@ -1,0 +1,13 @@
+{
+  "markets": [
+    {"subtitle": "$93,000 or above", "yes_bid_dollars": "0.9700", "yes_ask_dollars": "0.9800", "no_bid_dollars": "0.0100", "no_ask_dollars": "0.0300", "ticker": "KXBTCD-93000"},
+    {"subtitle": "$93,500 or above", "yes_bid_dollars": "0.9500", "yes_ask_dollars": "0.9600", "no_bid_dollars": "0.0300", "no_ask_dollars": "0.0500", "ticker": "KXBTCD-93500"},
+    {"subtitle": "$94,000 or above", "yes_bid_dollars": "0.8700", "yes_ask_dollars": "0.3800", "no_bid_dollars": "0.0600", "no_ask_dollars": "0.0800", "ticker": "KXBTCD-94000"},
+    {"subtitle": "$94,500 or above", "yes_bid_dollars": "0.8700", "yes_ask_dollars": "0.4200", "no_bid_dollars": "0.1100", "no_ask_dollars": "0.1300", "ticker": "KXBTCD-94500"},
+    {"subtitle": "$95,000 or above", "yes_bid_dollars": "0.5000", "yes_ask_dollars": "0.5200", "no_bid_dollars": "0.4700", "no_ask_dollars": "0.5000", "ticker": "KXBTCD-95000"},
+    {"subtitle": "$95,500 or above", "yes_bid_dollars": "0.3500", "yes_ask_dollars": "0.3700", "no_bid_dollars": "0.6200", "no_ask_dollars": "0.6500", "ticker": "KXBTCD-95500"},
+    {"subtitle": "$96,000 or above", "yes_bid_dollars": "0.2000", "yes_ask_dollars": "0.2200", "no_bid_dollars": "0.7700", "no_ask_dollars": "0.7900", "ticker": "KXBTCD-96000"},
+    {"subtitle": "$96,500 or above", "yes_bid_dollars": "0.1000", "yes_ask_dollars": "0.1200", "no_bid_dollars": "0.8700", "no_ask_dollars": "0.8900", "ticker": "KXBTCD-96500"},
+    {"subtitle": "$97,000 or above", "yes_bid_dollars": "0.0500", "yes_ask_dollars": "0.0700", "no_bid_dollars": "0.9200", "no_ask_dollars": "0.9400", "ticker": "KXBTCD-97000"}
+  ]
+}
