@@ -46,6 +46,25 @@ This section guides you through submitting an enhancement suggestion, including 
     npm run dev
     ```
 
+## 🧪 Running Tests
+
+Before submitting a pull request, ensure all tests pass:
+
+```bash
+cd backend
+pip install -r requirements.txt
+
+# Run all offline tests (unit + integration)
+pytest tests/ -m "not live" -v
+
+# Run only integration tests
+pytest tests/ -m integration -v
+```
+
+Test markers are configured in `backend/pyproject.toml`:
+- `integration` — full-pipeline tests with mocked HTTP
+- `live` — tests that hit real external APIs (skip by default)
+
 ## 🎨 Styleguides
 
 ### Python

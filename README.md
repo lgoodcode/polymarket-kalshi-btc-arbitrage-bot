@@ -34,6 +34,7 @@ This project includes:
 
 -   **Backend**: Python, FastAPI, Uvicorn, Requests
 -   **Frontend**: TypeScript, Next.js, Tailwind CSS, shadcn/ui, Lucide React
+-   **Testing**: pytest, pytest-mock, vcrpy (135 tests across 3 tiers)
 
 ## 📦 Installation
 
@@ -88,6 +89,28 @@ The dashboard will be available at `http://localhost:3000`.
     -   If `Poly Strike > Kalshi Strike`: Checks `Poly Down + Kalshi Yes`.
     -   If `Poly Strike < Kalshi Strike`: Checks `Poly Up + Kalshi No`.
 4.  **Calculation**: It sums the cost of the two legs. If `Total Cost < $1.00`, it's an arbitrage opportunity!
+
+## 🧪 Testing
+
+The project includes a comprehensive test suite with three tiers:
+
+```bash
+cd backend
+
+# Unit tests (121 tests, fast, no network)
+pytest tests/ -m "not integration and not live" -v
+
+# Integration tests (14 tests, full pipeline with mocked HTTP)
+pytest tests/ -m integration -v
+
+# All offline tests (unit + integration, CI-safe)
+pytest tests/ -m "not live" -v
+
+# Live smoke tests (hits real APIs, requires network)
+RUN_LIVE_TESTS=1 pytest tests/ -m live -v
+```
+
+See [USAGE.md](USAGE.md) for detailed test documentation and bot operation guide.
 
 ## 🤝 Contributing
 
