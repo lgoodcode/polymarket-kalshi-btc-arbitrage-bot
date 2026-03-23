@@ -8,7 +8,7 @@ See `thesis.md` for the mathematical foundation.
 
 ## Architecture
 
-```
+```text
 External APIs (Polymarket, Kalshi, Binance)
         │
         ├── fetch_current_polymarket.py   # Polymarket + Binance data
@@ -42,7 +42,7 @@ External APIs (Polymarket, Kalshi, Binance)
 
 ## Directory Structure
 
-```
+```text
 backend/
   api.py                        # FastAPI server (main entry point)
   arbitrage_bot.py              # CLI bot with 1s polling loop
