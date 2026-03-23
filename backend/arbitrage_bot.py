@@ -67,12 +67,12 @@ def check_arbitrage():
     
     for km in kalshi_markets:
         kalshi_strike = km['strike']
-        # Kalshi prices are in cents (integer), convert to dollars
-        kalshi_yes_cost = km['yes_ask'] / 100.0
-        kalshi_no_cost = km['no_ask'] / 100.0
+        # Values are already in dollars (normalized by fetch_current_kalshi)
+        kalshi_yes_cost = km['yes_ask']
+        kalshi_no_cost = km['no_ask']
 
         # Skip markets with unpriced legs (0 = no quote available)
-        if km['yes_ask'] == 0 or km['no_ask'] == 0:
+        if kalshi_yes_cost == 0 or kalshi_no_cost == 0:
             continue
 
         # Only print markets close to Poly strike to avoid spamming?

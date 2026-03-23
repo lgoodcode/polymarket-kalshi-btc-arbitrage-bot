@@ -2,20 +2,29 @@
 
 ## Current State
 
-**Backend:** 121 tests across 7 test files covering all 7 core modules.
+**Backend:** 144 tests across 10 test files covering all core modules + integration/E2E.
 **Frontend:** 0 tests, no test framework configured.
 
 ### Backend Test Inventory
 
-| Test File | Tests | Module Covered |
-|-----------|-------|----------------|
-| `test_api.py` | 47 | `api.py` (FastAPI endpoint, fees) |
-| `test_arbitrage_bot.py` | 19 | `arbitrage_bot.py` (CLI bot) |
-| `test_fetch_current_kalshi.py` | 25 | `fetch_current_kalshi.py` |
-| `test_fetch_current_polymarket.py` | 26 | `fetch_current_polymarket.py` |
-| `test_find_new_kalshi_market.py` | 9 | `find_new_kalshi_market.py` |
-| `test_find_new_market.py` | 9 | `find_new_market.py` |
-| `test_get_current_markets.py` | 8 | `get_current_markets.py` |
+| Test File | Tests | Category |
+|-----------|-------|----------|
+| `test_api.py` | 28 | Unit: FastAPI endpoint, fees |
+| `test_arbitrage_bot.py` | 22 | Unit: CLI bot |
+| `test_fetch_current_kalshi.py` | 18 | Unit: Kalshi API parsing |
+| `test_fetch_current_polymarket.py` | 22 | Unit: Polymarket/CLOB/Binance |
+| `test_find_new_kalshi_market.py` | 11 | Unit: Kalshi slug generation |
+| `test_find_new_market.py` | 14 | Unit: Polymarket slug generation |
+| `test_get_current_markets.py` | 6 | Unit: Market URL coordination |
+| `test_integration.py` | 14 | Integration: Full pipeline (mocked HTTP) |
+| `test_e2e_recorded.py` | 4 | Tier 2: VCR cassette schema validation |
+| `test_e2e_live.py` | 5 | Tier 3: Live API smoke tests |
+| **Total** | **144** | 135 pass offline, 4 skipped (no cassettes), 5 live-only |
+
+### Recent Changes
+- **Kalshi API migration**: Updated from integer cent fields to `_dollars` string fields (March 2026 breaking change)
+- **Integration tests**: 14 tests exercising full pipeline from time→slug→HTTP→arbitrage→response
+- **Live smoke tests**: 5 tests hitting real APIs, gated by `RUN_LIVE_TESTS=1`
 
 ### Untested Backend Files
 
@@ -42,9 +51,11 @@ The dashboard (`frontend/app/page.tsx`, ~300 lines) has no test coverage and no 
 
 **Action:** Add Vitest + React Testing Library. Create `__tests__/page.test.tsx`.
 
-### 2. Backend Integration Tests (MEDIUM)
+### 2. Backend Integration Tests (DONE)
 
-All API tests mock at the `fetch_*_data_struct` level. No test exercises the full pipeline (HTTP mock → parsing → arbitrage detection). Integration tests mocking at the `requests.get` level would catch bugs between modules.
+~~All API tests mock at the `fetch_*_data_struct` level. No test exercises the full pipeline.~~
+
+**Implemented**: 14 integration tests in `test_integration.py` mock at `requests.get` level, exercising the full pipeline. Covers arb found, no arb, API failures, stale prices, unpriced markets, equal strikes, fee erosion, timeouts, CLI bot output, and market window selection.
 
 ### 3. Tests for `fetch_data.py` (MEDIUM)
 

@@ -184,7 +184,7 @@ class TestGetArbitrageData:
             "event_ticker": "TEST",
             "current_price": 96500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 80, "yes_ask": 42, "no_bid": 15, "no_ask": 58, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.80, "yes_ask": 0.42, "no_bid": 0.15, "no_ask": 0.58, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -216,7 +216,7 @@ class TestGetArbitrageData:
             "event_ticker": "TEST",
             "current_price": 94500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 50, "yes_ask": 58, "no_bid": 40, "no_ask": 42, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.58, "no_bid": 0.40, "no_ask": 0.42, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -244,7 +244,7 @@ class TestGetArbitrageData:
             "event_ticker": "TEST",
             "current_price": 95500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 30, "yes_ask": 35, "no_bid": 30, "no_ask": 35, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.30, "yes_ask": 0.35, "no_bid": 0.30, "no_ask": 0.35, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -270,7 +270,7 @@ class TestGetArbitrageData:
             "event_ticker": "TEST",
             "current_price": 96500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 80, "yes_ask": 82, "no_bid": 15, "no_ask": 18, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.80, "yes_ask": 0.82, "no_bid": 0.15, "no_ask": 0.18, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -296,7 +296,7 @@ class TestGetArbitrageData:
             "event_ticker": "TEST",
             "current_price": 96500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 49, "yes_ask": 50, "no_bid": 49, "no_ask": 50, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.49, "yes_ask": 0.50, "no_bid": 0.49, "no_ask": 0.50, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -357,8 +357,8 @@ class TestGetArbitrageData:
             strike = 90000.0 + (i * 500)
             markets.append({
                 "strike": strike,
-                "yes_bid": 50, "yes_ask": 52,
-                "no_bid": 47, "no_ask": 49,
+                "yes_bid": 0.50, "yes_ask": 0.52,
+                "no_bid": 0.47, "no_ask": 0.49,
                 "subtitle": f"${int(strike):,} or above"
             })
 
@@ -398,7 +398,7 @@ class TestGetArbitrageData:
             "event_ticker": "TEST",
             "current_price": 96500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 80, "yes_ask": 82, "no_bid": 15, "no_ask": 18, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.80, "yes_ask": 0.82, "no_bid": 0.15, "no_ask": 0.18, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -438,7 +438,7 @@ class TestGetArbitrageData:
             "event_ticker": "TEST",
             "current_price": 95500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 50, "yes_ask": 52, "no_bid": 47, "no_ask": 49, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.52, "no_bid": 0.47, "no_ask": 0.49, "subtitle": "$95,000 or above"},
             ]
         }, None)
 

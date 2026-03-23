@@ -29,9 +29,12 @@ fastapi>=0.100.0
 uvicorn>=0.20.0
 requests>=2.31.0
 pytz>=2023.3
+pytest>=7.0.0
+pytest-mock>=3.10.0
+httpx>=0.24.0
+vcrpy>=6.0.0
+pytest-timeout>=2.2.0
 ```
-
-**Test dependencies to add**: `pytest`, `pytest-mock`, `httpx` (for FastAPI TestClient)
 
 ---
 
@@ -289,6 +292,7 @@ pytz>=2023.3
 ### Directory Structure
 ```
 backend/
+├── pyproject.toml                # pytest markers (integration, live)
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py              # Shared fixtures and mock data
@@ -298,7 +302,12 @@ backend/
 │   ├── test_fetch_current_kalshi.py
 │   ├── test_fetch_current_polymarket.py
 │   ├── test_api.py
-│   └── test_arbitrage_bot.py
+│   ├── test_arbitrage_bot.py
+│   ├── test_integration.py      # Tier 1: 14 mock-based integration tests
+│   ├── test_e2e_recorded.py     # Tier 2: VCR cassette replay tests
+│   ├── test_e2e_live.py         # Tier 3: live dry-run smoke tests
+│   ├── fixtures/                # JSON fixture files for integration tests
+│   └── cassettes/               # Recorded API responses (Tier 2)
 ```
 
 ### conftest.py Fixtures Needed
@@ -362,18 +371,21 @@ SAMPLE_BINANCE_KLINE = [[1700000000000, "95000.00", "96000.00", "94500.00", "958
 
 ---
 
-## Test Count Estimate
+## Test Count (Actual)
 
-| File | Estimated Tests | Category |
-|------|----------------|----------|
-| test_find_new_market.py | ~12 | Pure slug generation + timezone |
-| test_find_new_kalshi_market.py | ~10 | Pure slug generation + timezone |
-| test_get_current_markets.py | ~6 | Time mocking + URL coordination |
-| test_fetch_current_kalshi.py | ~18 | parse_strike + API mocking |
-| test_fetch_current_polymarket.py | ~22 | CLOB + Polymarket + Binance mocking |
-| test_api.py | ~30 | Arbitrage logic + fee calc + endpoint |
-| test_arbitrage_bot.py | ~15 | CLI output verification |
-| **Total** | **~113** | |
+| File | Tests | Category |
+|------|-------|----------|
+| test_find_new_market.py | 14 | Pure slug generation + timezone |
+| test_find_new_kalshi_market.py | 11 | Pure slug generation + timezone |
+| test_get_current_markets.py | 6 | Time mocking + URL coordination |
+| test_fetch_current_kalshi.py | 18 | parse_strike + API mocking |
+| test_fetch_current_polymarket.py | 22 | CLOB + Polymarket + Binance mocking |
+| test_api.py | 28 | Arbitrage logic + fee calc + endpoint |
+| test_arbitrage_bot.py | 22 | CLI output verification |
+| test_integration.py | 14 | Full pipeline integration (mocked HTTP) |
+| test_e2e_recorded.py | 4 | VCR cassette schema validation |
+| test_e2e_live.py | 5 | Live API smoke tests |
+| **Total** | **144** | (135 offline + 4 skipped + 5 live-only) |
 
 ---
 

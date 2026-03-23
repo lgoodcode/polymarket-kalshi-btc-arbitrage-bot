@@ -1,6 +1,17 @@
 # E2E & Integration Testing Review
 
-## Executive Summary
+## Status: IMPLEMENTED
+
+All three tiers of E2E/integration tests have been implemented:
+- **Tier 1**: 14 mock-based integration tests in `backend/tests/test_integration.py`
+- **Tier 2**: 4 VCR cassette tests in `backend/tests/test_e2e_recorded.py`
+- **Tier 3**: 5 live smoke tests in `backend/tests/test_e2e_live.py`
+
+Additionally, the **Kalshi API migration** from integer cent fields to `_dollars` string fields has been completed in `fetch_current_kalshi.py` with backward compatibility.
+
+See [USAGE.md](USAGE.md) for test run commands.
+
+## Original Executive Summary
 
 **Yes, we can implement comprehensive E2E dry-run tests.** The bot is a read-only detection tool (no trade execution), all three external APIs (Polymarket Gamma, Polymarket CLOB, Kalshi, Binance) have **public, unauthenticated read endpoints**, and the architecture is well-suited for both mock-based integration tests and live dry-run tests.
 

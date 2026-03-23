@@ -71,7 +71,7 @@ class TestCheckArbitrage:
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
-            "markets": [{"strike": 95000.0, "yes_bid": 50, "yes_ask": 52, "no_bid": 47, "no_ask": 49}]
+            "markets": [{"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.52, "no_bid": 0.47, "no_ask": 0.49}]
         }, None)
 
         check_arbitrage()
@@ -88,7 +88,7 @@ class TestCheckArbitrage:
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
-            "markets": [{"strike": 95000.0, "yes_bid": 50, "yes_ask": 52, "no_bid": 47, "no_ask": 49}]
+            "markets": [{"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.52, "no_bid": 0.47, "no_ask": 0.49}]
         }, None)
 
         check_arbitrage()
@@ -124,7 +124,7 @@ class TestCheckArbitrage:
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 96500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 40, "yes_ask": 42, "no_bid": 55, "no_ask": 58, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.40, "yes_ask": 0.42, "no_bid": 0.55, "no_ask": 0.58, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -145,7 +145,7 @@ class TestCheckArbitrage:
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 94500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 50, "yes_ask": 58, "no_bid": 40, "no_ask": 42, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.58, "no_bid": 0.40, "no_ask": 0.42, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -166,7 +166,7 @@ class TestCheckArbitrage:
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 30, "yes_ask": 35, "no_bid": 30, "no_ask": 35, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.30, "yes_ask": 0.35, "no_bid": 0.30, "no_ask": 0.35, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -186,7 +186,7 @@ class TestCheckArbitrage:
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 50, "yes_ask": 80, "no_bid": 47, "no_ask": 80, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.80, "no_bid": 0.47, "no_ask": 0.80, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -226,7 +226,7 @@ class TestCheckArbitrage:
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 96500.0,
             "markets": [
-                {"strike": 95000.0, "yes_bid": 30, "yes_ask": 32, "no_bid": 65, "no_ask": 68, "subtitle": "$95,000 or above"},
+                {"strike": 95000.0, "yes_bid": 0.30, "yes_ask": 0.32, "no_bid": 0.65, "no_ask": 0.68, "subtitle": "$95,000 or above"},
             ]
         }, None)
 
