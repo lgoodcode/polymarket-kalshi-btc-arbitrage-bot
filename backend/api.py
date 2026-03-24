@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fetch_current_polymarket import fetch_polymarket_data_struct
 from fetch_current_kalshi import fetch_kalshi_data_struct
 from arbitrage import estimate_fees, add_fee_info, run_arbitrage_checks
+from binance import get_binance_current_price
 from http_utils import create_session
 from config import CORS_ORIGINS, PRICE_SUM_MIN, PRICE_SUM_MAX, CACHE_TTL
 from log_config import setup_logging
@@ -38,6 +39,12 @@ app.add_middleware(
 _cache = {"data": None, "timestamp": 0.0}
 
 
+def clear_cache():
+    """Reset the server-side response cache."""
+    _cache["data"] = None
+    _cache["timestamp"] = 0.0
+
+
 # --- Legacy aliases for backward compatibility with tests ---
 _estimate_fees = estimate_fees
 _add_fee_info = add_fee_info
@@ -53,11 +60,12 @@ async def get_arbitrage_data():
     scan_id = str(uuid.uuid4())[:8]
     logger.info("Scan %s started", scan_id)
 
-    # SEC-003: parallel fetching
+    # SEC-003: parallel fetching; fetch Binance price once to avoid duplicate calls
     session = await create_session()
     try:
-        poly_task = fetch_polymarket_data_struct(session)
-        kalshi_task = fetch_kalshi_data_struct(session)
+        binance_price = await get_binance_current_price(session)
+        poly_task = fetch_polymarket_data_struct(session, binance_price=binance_price)
+        kalshi_task = fetch_kalshi_data_struct(session, binance_price=binance_price)
         (poly_data, poly_err), (kalshi_data, kalshi_err) = await asyncio.gather(
             poly_task, kalshi_task
         )

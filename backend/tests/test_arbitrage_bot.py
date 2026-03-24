@@ -30,11 +30,12 @@ class TestEstimateFees:
 
 # --- check_arbitrage tests ---
 
+@patch('arbitrage_bot.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_poly_error(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_poly_error(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (None, "Polymarket Error: API down")
@@ -47,7 +48,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_kalshi_error(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_kalshi_error(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({"price_to_beat": 95000.0, "prices": {"Up": 0.55, "Down": 0.47}}, None)
@@ -60,7 +61,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_missing_data(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_missing_data(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (None, None)
@@ -73,7 +74,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_poly_strike_none(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_poly_strike_none(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -93,7 +94,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_price_sanity_fail(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_price_sanity_fail(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -114,7 +115,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_no_kalshi_markets(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_no_kalshi_markets(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -134,7 +135,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_arb_found_poly_gt_kalshi(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_arb_found_poly_gt_kalshi(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -158,7 +159,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_arb_found_poly_lt_kalshi(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_arb_found_poly_lt_kalshi(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -182,7 +183,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_arb_found_equal_strikes(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_arb_found_equal_strikes(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -205,7 +206,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_no_arb_found(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_no_arb_found(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -227,7 +228,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_unpriced_legs_skipped(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_unpriced_legs_skipped(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -250,7 +251,7 @@ class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_fee_profitable_label(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_fee_profitable_label(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({

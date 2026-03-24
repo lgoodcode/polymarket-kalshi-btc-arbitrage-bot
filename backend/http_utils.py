@@ -1,6 +1,7 @@
 """HTTP utilities: aiohttp session management and retry logic."""
 import asyncio
 import logging
+from typing import Optional
 import aiohttp
 from config import REQUEST_TIMEOUT, MAX_RETRIES, RETRY_BASE_DELAY, RETRY_BACKOFF_FACTOR, RATE_LIMIT_BACKOFF
 
@@ -13,7 +14,7 @@ async def create_session() -> aiohttp.ClientSession:
     return aiohttp.ClientSession(timeout=timeout)
 
 
-async def fetch_json(session: aiohttp.ClientSession, url: str, params: dict = None) -> dict:
+async def fetch_json(session: aiohttp.ClientSession, url: str, params: Optional[dict] = None) -> dict:
     """
     Fetch JSON from a URL with retry and exponential backoff.
 

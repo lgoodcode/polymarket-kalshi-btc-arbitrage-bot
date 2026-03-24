@@ -39,10 +39,6 @@ def run_arbitrage_checks(poly_strike, poly_up_cost, poly_down_cost, kalshi_marke
         kalshi_yes_cost = km["yes_ask"]
         kalshi_no_cost = km["no_ask"]
 
-        # Skip markets with unpriced legs (0 = no quote available)
-        if kalshi_yes_cost == 0 or kalshi_no_cost == 0:
-            continue
-
         check_data = {
             "kalshi_strike": kalshi_strike,
             "kalshi_yes": kalshi_yes_cost,
@@ -58,6 +54,9 @@ def run_arbitrage_checks(poly_strike, poly_up_cost, poly_down_cost, kalshi_marke
         }
 
         if poly_strike > kalshi_strike:
+            # Only need kalshi_yes — skip if no quote
+            if kalshi_yes_cost == 0:
+                continue
             check_data["type"] = "Poly > Kalshi"
             check_data["poly_leg"] = "Down"
             check_data["kalshi_leg"] = "Yes"
@@ -66,6 +65,9 @@ def run_arbitrage_checks(poly_strike, poly_up_cost, poly_down_cost, kalshi_marke
             check_data["total_cost"] = poly_down_cost + kalshi_yes_cost
 
         elif poly_strike < kalshi_strike:
+            # Only need kalshi_no — skip if no quote
+            if kalshi_no_cost == 0:
+                continue
             check_data["type"] = "Poly < Kalshi"
             check_data["poly_leg"] = "Up"
             check_data["kalshi_leg"] = "No"
@@ -74,37 +76,39 @@ def run_arbitrage_checks(poly_strike, poly_up_cost, poly_down_cost, kalshi_marke
             check_data["total_cost"] = poly_up_cost + kalshi_no_cost
 
         elif poly_strike == kalshi_strike:
-            # Check 1: Down + Yes
-            check1 = check_data.copy()
-            check1["type"] = "Equal"
-            check1["poly_leg"] = "Down"
-            check1["kalshi_leg"] = "Yes"
-            check1["poly_cost"] = poly_down_cost
-            check1["kalshi_cost"] = kalshi_yes_cost
-            check1["total_cost"] = poly_down_cost + kalshi_yes_cost
+            # Check 1: Down + Yes (skip if kalshi_yes has no quote)
+            if kalshi_yes_cost != 0:
+                check1 = check_data.copy()
+                check1["type"] = "Equal"
+                check1["poly_leg"] = "Down"
+                check1["kalshi_leg"] = "Yes"
+                check1["poly_cost"] = poly_down_cost
+                check1["kalshi_cost"] = kalshi_yes_cost
+                check1["total_cost"] = poly_down_cost + kalshi_yes_cost
 
-            if check1["total_cost"] < 1.00:
-                check1["is_arbitrage"] = True
-                check1["margin"] = 1.00 - check1["total_cost"]
-                add_fee_info(check1)
-                opportunities.append(check1)
-            checks.append(check1)
+                if check1["total_cost"] < 1.00:
+                    check1["is_arbitrage"] = True
+                    check1["margin"] = 1.00 - check1["total_cost"]
+                    add_fee_info(check1)
+                    opportunities.append(check1)
+                checks.append(check1)
 
-            # Check 2: Up + No
-            check2 = check_data.copy()
-            check2["type"] = "Equal"
-            check2["poly_leg"] = "Up"
-            check2["kalshi_leg"] = "No"
-            check2["poly_cost"] = poly_up_cost
-            check2["kalshi_cost"] = kalshi_no_cost
-            check2["total_cost"] = poly_up_cost + kalshi_no_cost
+            # Check 2: Up + No (skip if kalshi_no has no quote)
+            if kalshi_no_cost != 0:
+                check2 = check_data.copy()
+                check2["type"] = "Equal"
+                check2["poly_leg"] = "Up"
+                check2["kalshi_leg"] = "No"
+                check2["poly_cost"] = poly_up_cost
+                check2["kalshi_cost"] = kalshi_no_cost
+                check2["total_cost"] = poly_up_cost + kalshi_no_cost
 
-            if check2["total_cost"] < 1.00:
-                check2["is_arbitrage"] = True
-                check2["margin"] = 1.00 - check2["total_cost"]
-                add_fee_info(check2)
-                opportunities.append(check2)
-            checks.append(check2)
+                if check2["total_cost"] < 1.00:
+                    check2["is_arbitrage"] = True
+                    check2["margin"] = 1.00 - check2["total_cost"]
+                    add_fee_info(check2)
+                    opportunities.append(check2)
+                checks.append(check2)
             continue  # Skip adding base check_data
 
         if check_data["total_cost"] < 1.00:

@@ -36,12 +36,13 @@ def parse_strike(subtitle: str):
     return None
 
 
-async def fetch_kalshi_data_struct(session: aiohttp.ClientSession = None):
+async def fetch_kalshi_data_struct(session: aiohttp.ClientSession = None, binance_price=None):
     """
     Fetch current Kalshi markets. Returns (data_dict, error_string).
 
-    Binance price is fetched here for standalone use. When called from
-    api.py, the shared Binance price is passed separately.
+    Args:
+        binance_price: Optional pre-fetched (price, error) tuple to avoid
+            duplicate Binance API calls when called alongside fetch_polymarket_data_struct.
     """
     own_session = session is None
     if own_session:
@@ -51,7 +52,10 @@ async def fetch_kalshi_data_struct(session: aiohttp.ClientSession = None):
         kalshi_url = market_info["kalshi"]
         event_ticker = kalshi_url.split("/")[-1].upper()
 
-        current_price, _ = await get_binance_current_price(session)
+        if binance_price is not None:
+            current_price, _ = binance_price
+        else:
+            current_price, _ = await get_binance_current_price(session)
 
         markets, err = await get_kalshi_markets(session, event_ticker)
         if err:

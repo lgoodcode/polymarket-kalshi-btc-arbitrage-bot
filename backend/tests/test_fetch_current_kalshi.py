@@ -8,7 +8,6 @@ from fetch_current_kalshi import (
     get_kalshi_markets,
     fetch_kalshi_data_struct,
 )
-from binance import get_binance_current_price
 
 UTC = pytz.utc
 
@@ -72,39 +71,14 @@ class TestGetKalshiMarkets:
         assert "500 Server Error" in err
 
 
-# --- get_binance_current_price tests ---
-
-class TestGetBinanceCurrentPrice:
-    @patch('binance.fetch_json', new_callable=AsyncMock)
-    async def test_success(self, mock_fetch, sample_binance_price_response):
-        mock_fetch.return_value = sample_binance_price_response
-        price, err = await get_binance_current_price(AsyncMock())
-        assert price == 95500.0
-        assert err is None
-
-    @patch('binance.fetch_json', new_callable=AsyncMock)
-    async def test_http_error(self, mock_fetch):
-        mock_fetch.side_effect = Exception("Connection error")
-        price, err = await get_binance_current_price(AsyncMock())
-        assert price is None
-        assert "Connection error" in err
-
-    @patch('binance.fetch_json', new_callable=AsyncMock)
-    async def test_timeout(self, mock_fetch):
-        import asyncio
-        mock_fetch.side_effect = asyncio.TimeoutError("Timeout")
-        price, err = await get_binance_current_price(AsyncMock())
-        assert price is None
-        assert err is not None
-
-
 # --- fetch_kalshi_data_struct tests ---
 
 class TestFetchKalshiDataStruct:
     @patch('fetch_current_kalshi.get_kalshi_markets', new_callable=AsyncMock)
     @patch('fetch_current_kalshi.get_binance_current_price', new_callable=AsyncMock)
     @patch('fetch_current_kalshi.get_current_market_urls')
-    async def test_normal_flow(self, mock_urls, mock_binance, mock_kalshi):
+    async def test_normal_flow_legacy_cents(self, mock_urls, mock_binance, mock_kalshi):
+        """Test parsing with legacy integer cent fields (pre-March 2026)."""
         mock_urls.return_value = {
             "kalshi": "https://kalshi.com/markets/kxbtcd/bitcoin-price-abovebelow/kxbtcd-25dec0114",
             "polymarket": "...",
@@ -130,7 +104,42 @@ class TestFetchKalshiDataStruct:
     @patch('fetch_current_kalshi.get_kalshi_markets', new_callable=AsyncMock)
     @patch('fetch_current_kalshi.get_binance_current_price', new_callable=AsyncMock)
     @patch('fetch_current_kalshi.get_current_market_urls')
-    async def test_invalid_subtitle_filtered(self, mock_urls, mock_binance, mock_kalshi):
+    async def test_normal_flow_dollars_format(self, mock_urls, mock_binance, mock_kalshi):
+        """Test parsing with _dollars string fields (post-March 2026)."""
+        mock_urls.return_value = {
+            "kalshi": "https://kalshi.com/markets/kxbtcd/bitcoin-price-abovebelow/kxbtcd-25dec0114",
+            "polymarket": "...",
+            "target_time_utc": datetime.datetime(2025, 12, 1, 14, 0, 0, tzinfo=UTC),
+            "target_time_et": datetime.datetime(2025, 12, 1, 9, 0, 0),
+        }
+        mock_binance.return_value = (95500.0, None)
+        mock_kalshi.return_value = ([
+            {
+                "subtitle": "$94,000 or above",
+                "yes_bid_dollars": "0.8500", "yes_ask_dollars": "0.8700",
+                "no_bid_dollars": "0.1200", "no_ask_dollars": "0.1400",
+            },
+            {
+                "subtitle": "$96,000 or above",
+                "yes_bid_dollars": "0.2000", "yes_ask_dollars": "0.2200",
+                "no_bid_dollars": "0.7700", "no_ask_dollars": "0.7900",
+            },
+        ], None)
+
+        session = AsyncMock()
+        session.close = AsyncMock()
+        data, err = await fetch_kalshi_data_struct(session)
+        assert err is None
+        assert len(data["markets"]) == 2
+        assert data["markets"][0]["yes_ask"] == 0.87
+        assert data["markets"][0]["no_ask"] == 0.14
+        assert data["markets"][1]["yes_ask"] == 0.22
+        assert data["markets"][1]["no_ask"] == 0.79
+
+    @patch('fetch_current_kalshi.get_kalshi_markets', new_callable=AsyncMock)
+    @patch('fetch_current_kalshi.get_binance_current_price', new_callable=AsyncMock)
+    @patch('fetch_current_kalshi.get_current_market_urls')
+    async def test_invalid_subtitle_filtered(self, mock_urls, mock_binance, mock_kalshi, caplog):
         mock_urls.return_value = {
             "kalshi": "https://kalshi.com/markets/kxbtcd/bitcoin-price-abovebelow/kxbtcd-25dec0114",
             "polymarket": "...",
@@ -145,9 +154,12 @@ class TestFetchKalshiDataStruct:
 
         session = AsyncMock()
         session.close = AsyncMock()
-        data, err = await fetch_kalshi_data_struct(session)
+        import logging
+        with caplog.at_level(logging.WARNING, logger="fetch_current_kalshi"):
+            data, err = await fetch_kalshi_data_struct(session)
         assert err is None
         assert len(data["markets"]) == 1
+        assert any("invalid subtitle" in rec.message for rec in caplog.records)
 
     @patch('fetch_current_kalshi.get_kalshi_markets', new_callable=AsyncMock)
     @patch('fetch_current_kalshi.get_binance_current_price', new_callable=AsyncMock)

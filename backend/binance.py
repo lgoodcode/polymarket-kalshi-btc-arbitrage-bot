@@ -4,6 +4,7 @@ Single source of truth for BTC price fetching — used by both
 fetch_current_polymarket and fetch_current_kalshi.
 """
 import logging
+from typing import Optional, Tuple
 import aiohttp
 from http_utils import fetch_json
 from config import BINANCE_PRICE_URL, BINANCE_KLINES_URL, SYMBOL
@@ -11,7 +12,7 @@ from config import BINANCE_PRICE_URL, BINANCE_KLINES_URL, SYMBOL
 logger = logging.getLogger(__name__)
 
 
-async def get_binance_current_price(session: aiohttp.ClientSession):
+async def get_binance_current_price(session: aiohttp.ClientSession) -> Tuple[Optional[float], Optional[str]]:
     """Fetch current BTC spot price from Binance. Returns (price, error)."""
     try:
         data = await fetch_json(session, BINANCE_PRICE_URL, params={"symbol": SYMBOL})
@@ -21,7 +22,7 @@ async def get_binance_current_price(session: aiohttp.ClientSession):
         return None, str(e)
 
 
-async def get_binance_open_price(session: aiohttp.ClientSession, target_time_utc):
+async def get_binance_open_price(session: aiohttp.ClientSession, target_time_utc) -> Tuple[Optional[float], Optional[str]]:
     """Fetch the 1-hour candle open price for a given UTC time. Returns (price, error)."""
     try:
         timestamp_ms = int(target_time_utc.timestamp() * 1000)

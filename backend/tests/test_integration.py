@@ -13,7 +13,7 @@ import pytz
 from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
-from api import app
+from api import app, clear_cache
 
 UTC = pytz.utc
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -32,11 +32,9 @@ async def client():
 
 
 @pytest.fixture(autouse=True)
-def clear_cache():
+def reset_cache():
     """Clear the server-side cache before each test."""
-    from api import _cache
-    _cache["data"] = None
-    _cache["timestamp"] = 0.0
+    clear_cache()
 
 
 def _make_poly_data(up, down, strike=95000.0, current=95500.0):
@@ -73,11 +71,12 @@ def _make_kalshi_market(strike, yes_ask, no_ask, yes_bid=None, no_bid=None):
 # =====================================================================
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineArbitrageFound:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_arbitrage_found(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_arbitrage_found(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.48, 0.47), None)
@@ -107,11 +106,12 @@ class TestFullPipelineArbitrageFound:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineNoArbitrage:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_no_arbitrage(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_no_arbitrage(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
@@ -133,11 +133,12 @@ class TestFullPipelineNoArbitrage:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineResponseStructure:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_api_response_structure(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_api_response_structure(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
@@ -170,11 +171,12 @@ class TestFullPipelineResponseStructure:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelinePolymarketDown:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_polymarket_api_down(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_polymarket_api_down(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (None, "Polymarket Error: 500 Server Error")
@@ -190,11 +192,12 @@ class TestFullPipelinePolymarketDown:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineKalshiDown:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_kalshi_api_down(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_kalshi_api_down(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
@@ -209,11 +212,12 @@ class TestFullPipelineKalshiDown:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(None, "Binance down"))
 class TestFullPipelineBinanceDown:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_binance_api_down(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_binance_api_down(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         # Binance errors result in None prices but data still returned
@@ -234,11 +238,12 @@ class TestFullPipelineBinanceDown:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineStalePrices:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_stale_polymarket_prices(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_stale_polymarket_prices(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.75, 0.75), None)  # Sum = 1.50 > 1.15
@@ -252,11 +257,12 @@ class TestFullPipelineStalePrices:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineUnpricedMarkets:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_unpriced_kalshi_markets(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_unpriced_kalshi_markets(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
@@ -274,11 +280,12 @@ class TestFullPipelineUnpricedMarkets:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineEqualStrikes:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_equal_strikes(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_equal_strikes(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.48, 0.47), None)
@@ -297,11 +304,12 @@ class TestFullPipelineEqualStrikes:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineFeeErosion:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_fee_erosion(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_fee_erosion(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         # Poly Up=0.50, Down=0.48, sum=0.98
@@ -324,11 +332,12 @@ class TestFullPipelineFeeErosion:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineMultipleOpportunities:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_multiple_opportunities(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_multiple_opportunities(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.48, 0.47), None)
@@ -344,11 +353,12 @@ class TestFullPipelineMultipleOpportunities:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineMarketWindow:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_market_selection_window(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_market_selection_window(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         markets = [_make_kalshi_market(90000 + i*500, 0.52, 0.49) for i in range(20)]
@@ -362,10 +372,11 @@ class TestFullPipelineMarketWindow:
 
 @pytest.mark.integration
 class TestCliBotFullPipeline:
+    @patch('arbitrage_bot.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
-    async def test_cli_bot_full_pipeline(self, mock_session, mock_poly, mock_kalshi, capsys):
+    async def test_cli_bot_full_pipeline(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (_make_poly_data(0.48, 0.47), None)
@@ -384,11 +395,12 @@ class TestCliBotFullPipeline:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineTimeout:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_full_pipeline_timeout_handling(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_full_pipeline_timeout_handling(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (None, "Connection timed out")

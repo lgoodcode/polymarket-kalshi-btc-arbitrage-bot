@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
-from api import app, _estimate_fees, _add_fee_info
+from api import app, _estimate_fees, _add_fee_info, clear_cache
 
 UTC = pytz.utc
 
@@ -71,19 +71,19 @@ class TestAddFeeInfo:
 
 # --- get_arbitrage_data endpoint tests ---
 
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_poly_error(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_poly_error(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (None, "Polymarket API down")
         mock_kalshi.return_value = ({"event_ticker": "TEST", "current_price": 100.0, "markets": []}, None)
 
         # Clear cache
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -95,14 +95,13 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_kalshi_error(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_kalshi_error(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({"price_to_beat": 95000.0, "current_price": 95500.0, "prices": {"Up": 0.55, "Down": 0.47}, "slug": "test", "target_time_utc": None}, None)
         mock_kalshi.return_value = (None, "Kalshi API down")
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -111,14 +110,13 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_both_errors(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_both_errors(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (None, "Poly error")
         mock_kalshi.return_value = (None, "Kalshi error")
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -127,7 +125,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_poly_strike_none(self, mock_session, mock_poly, mock_kalshi, client, sample_kalshi_data):
+    async def test_poly_strike_none(self, mock_session, mock_poly, mock_kalshi, mock_binance, client, sample_kalshi_data):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -139,8 +137,7 @@ class TestGetArbitrageData:
         }, None)
         mock_kalshi.return_value = (sample_kalshi_data, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -150,7 +147,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_price_sanity_fail_too_low(self, mock_session, mock_poly, mock_kalshi, client, sample_kalshi_data):
+    async def test_price_sanity_fail_too_low(self, mock_session, mock_poly, mock_kalshi, mock_binance, client, sample_kalshi_data):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -162,8 +159,7 @@ class TestGetArbitrageData:
         }, None)
         mock_kalshi.return_value = (sample_kalshi_data, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -173,7 +169,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_price_sanity_fail_too_high(self, mock_session, mock_poly, mock_kalshi, client, sample_kalshi_data):
+    async def test_price_sanity_fail_too_high(self, mock_session, mock_poly, mock_kalshi, mock_binance, client, sample_kalshi_data):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -185,8 +181,7 @@ class TestGetArbitrageData:
         }, None)
         mock_kalshi.return_value = (sample_kalshi_data, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -195,7 +190,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_price_sanity_pass_normal(self, mock_session, mock_poly, mock_kalshi, client, sample_kalshi_data):
+    async def test_price_sanity_pass_normal(self, mock_session, mock_poly, mock_kalshi, mock_binance, client, sample_kalshi_data):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -207,8 +202,7 @@ class TestGetArbitrageData:
         }, None)
         mock_kalshi.return_value = (sample_kalshi_data, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -218,7 +212,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_arb_poly_gt_kalshi(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_arb_poly_gt_kalshi(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -236,8 +230,7 @@ class TestGetArbitrageData:
             ]
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -254,7 +247,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_arb_poly_lt_kalshi(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_arb_poly_lt_kalshi(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -272,8 +265,7 @@ class TestGetArbitrageData:
             ]
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -286,7 +278,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_arb_equal_strikes_both_combos(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_arb_equal_strikes_both_combos(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -304,8 +296,7 @@ class TestGetArbitrageData:
             ]
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -315,7 +306,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_no_arb_total_above_one(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_no_arb_total_above_one(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -333,8 +324,7 @@ class TestGetArbitrageData:
             ]
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -345,7 +335,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_no_arb_exactly_one(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_no_arb_exactly_one(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -363,8 +353,7 @@ class TestGetArbitrageData:
             ]
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -373,7 +362,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_unpriced_legs_skipped(self, mock_session, mock_poly, mock_kalshi, client, sample_kalshi_data_with_unpriced):
+    async def test_unpriced_legs_skipped(self, mock_session, mock_poly, mock_kalshi, mock_binance, client, sample_kalshi_data_with_unpriced):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -385,8 +374,7 @@ class TestGetArbitrageData:
         }, None)
         mock_kalshi.return_value = (sample_kalshi_data_with_unpriced, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -398,7 +386,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_empty_kalshi_markets(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_empty_kalshi_markets(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -414,8 +402,7 @@ class TestGetArbitrageData:
             "markets": []
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -426,7 +413,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_market_selection_window(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_market_selection_window(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         markets = []
@@ -452,8 +439,7 @@ class TestGetArbitrageData:
             "markets": markets
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -463,7 +449,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_fee_info_only_on_opportunities(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_fee_info_only_on_opportunities(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -481,8 +467,7 @@ class TestGetArbitrageData:
             ]
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -492,14 +477,13 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_response_structure(self, mock_session, mock_poly, mock_kalshi, client, sample_poly_data, sample_kalshi_data):
+    async def test_response_structure(self, mock_session, mock_poly, mock_kalshi, mock_binance, client, sample_poly_data, sample_kalshi_data):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = (sample_poly_data, None)
         mock_kalshi.return_value = (sample_kalshi_data, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
@@ -515,7 +499,7 @@ class TestGetArbitrageData:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('api.create_session', new_callable=AsyncMock)
-    async def test_equal_strike_continue_no_double_count(self, mock_session, mock_poly, mock_kalshi, client):
+    async def test_equal_strike_continue_no_double_count(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
@@ -533,9 +517,88 @@ class TestGetArbitrageData:
             ]
         }, None)
 
-        from api import _cache
-        _cache["data"] = None; _cache["timestamp"] = 0.0
+        clear_cache()
 
         resp = await client.get("/arbitrage")
         data = resp.json()
         assert len(data["checks"]) == 2
+
+
+# --- /health endpoint tests ---
+
+from unittest.mock import MagicMock
+
+
+def _make_mock_resp(status):
+    """Create a mock aiohttp response as an async context manager."""
+    resp = MagicMock()
+    resp.status = status
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=resp)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    return ctx
+
+
+def _make_mock_session(get_side_effect=None, get_return_value=None):
+    """Create a mock aiohttp.ClientSession as an async context manager."""
+    session = MagicMock()
+    if get_side_effect is not None:
+        session.get = MagicMock(side_effect=get_side_effect)
+    elif get_return_value is not None:
+        session.get = MagicMock(return_value=get_return_value)
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    return ctx
+
+
+class TestHealthCheck:
+    @patch('aiohttp.ClientSession')
+    async def test_all_healthy(self, mock_session_cls, client):
+        mock_session_cls.return_value = _make_mock_session(
+            get_return_value=_make_mock_resp(200)
+        )
+
+        resp = await client.get("/health")
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["status"] == "healthy"
+        assert all(s["status"] == "ok" for s in data["services"].values())
+        assert set(data["services"].keys()) == {"polymarket", "kalshi", "binance"}
+
+    @patch('aiohttp.ClientSession')
+    async def test_one_service_down_returns_degraded(self, mock_session_cls, client):
+        responses = [_make_mock_resp(500), _make_mock_resp(200), _make_mock_resp(200)]
+        mock_session_cls.return_value = _make_mock_session(
+            get_side_effect=responses
+        )
+
+        resp = await client.get("/health")
+        data = resp.json()
+        assert data["status"] == "degraded"
+
+    @patch('aiohttp.ClientSession')
+    async def test_connection_error_returns_degraded(self, mock_session_cls, client):
+        mock_session_cls.return_value = _make_mock_session(
+            get_side_effect=Exception("Connection refused")
+        )
+
+        resp = await client.get("/health")
+        data = resp.json()
+        assert data["status"] == "degraded"
+        for svc in data["services"].values():
+            assert svc["status"] == "error"
+            assert "error" in svc
+
+    @patch('aiohttp.ClientSession')
+    async def test_4xx_treated_as_error(self, mock_session_cls, client):
+        mock_session_cls.return_value = _make_mock_session(
+            get_return_value=_make_mock_resp(404)
+        )
+
+        resp = await client.get("/health")
+        data = resp.json()
+        assert data["status"] == "degraded"
+        for svc in data["services"].values():
+            assert svc["status"] == "error"
+            assert svc["http_code"] == 404

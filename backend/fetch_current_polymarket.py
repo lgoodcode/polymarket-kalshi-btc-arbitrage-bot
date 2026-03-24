@@ -49,6 +49,9 @@ async def get_polymarket_data(session: aiohttp.ClientSession, slug: str):
         if len(clob_token_ids) != 2:
             return None, "Unexpected number of tokens"
 
+        if len(outcomes) != len(clob_token_ids):
+            return None, f"Mismatched outcomes ({len(outcomes)}) and token IDs ({len(clob_token_ids)})"
+
         prices = {}
         for outcome, token_id in zip(outcomes, clob_token_ids):
             price = await get_clob_price(session, token_id)
@@ -62,13 +65,17 @@ async def get_polymarket_data(session: aiohttp.ClientSession, slug: str):
         return None, str(e)
 
 
-async def fetch_polymarket_data_struct(session: aiohttp.ClientSession = None):
+async def fetch_polymarket_data_struct(session: aiohttp.ClientSession = None, binance_price=None):
     """
     Fetch current Polymarket data. Returns (data_dict, error_string).
 
     If price_to_beat or current_price cannot be fetched from Binance,
     they are set to None with a warning logged. The caller (api.py)
     is responsible for checking None values before using them (SEC-007).
+
+    Args:
+        binance_price: Optional pre-fetched (price, error) tuple to avoid
+            duplicate Binance API calls when called alongside fetch_kalshi_data_struct.
     """
     own_session = session is None
     if own_session:
@@ -83,7 +90,10 @@ async def fetch_polymarket_data_struct(session: aiohttp.ClientSession = None):
         if poly_err:
             return None, f"Polymarket Error: {poly_err}"
 
-        current_price, curr_err = await get_binance_current_price(session)
+        if binance_price is not None:
+            current_price, curr_err = binance_price
+        else:
+            current_price, curr_err = await get_binance_current_price(session)
         price_to_beat, beat_err = await get_binance_open_price(session, target_time_utc)
 
         # SEC-007: treat None critical prices as error
