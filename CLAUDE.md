@@ -112,13 +112,13 @@ cd backend && pip install -r requirements-dev.txt
 # Run API server (localhost:8000)
 python api.py
 
-# Run CLI bot (continuous 1s polling)
+# Run CLI bot (continuous polling, default 5s interval)
 python arbitrage_bot.py
 
-# Run unit tests only (121 tests, fast)
+# Run unit tests only (fast)
 pytest tests/ -m "not integration and not live" -v
 
-# Run unit + integration tests (135 tests, CI-safe)
+# Run unit + integration tests (146 tests, CI-safe)
 pytest tests/ -m "not live" -v
 
 # Run all tests including live smoke tests

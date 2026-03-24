@@ -1,14 +1,23 @@
 """
 Tier 2: Recorded response tests (VCR/Cassette style).
 
-These tests use vcrpy to replay recorded real API responses.
+These tests validate fixture files and recorded API responses.
 Cassettes are stored in tests/cassettes/ as YAML files.
 
-To record new cassettes:
+Note: The bot uses aiohttp (async) for HTTP. Standard vcrpy works with
+requests but not aiohttp. For cassette recording with aiohttp, use
+aioresponses or vcrpy with the aiohttp adapter when recording new cassettes.
+
+To record cassettes (requires network):
     RUN_LIVE_TESTS=1 pytest tests/test_e2e_recorded.py --vcr-record=new_episodes -v
 
 To replay existing cassettes (offline, CI-safe):
     pytest tests/test_e2e_recorded.py -v
+
+To enable these tests without cassettes:
+    1. Record cassettes from a network-connected environment
+    2. Commit cassette files in tests/cassettes/
+    3. Tests will automatically detect and use them
 """
 import os
 import json
