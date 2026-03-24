@@ -7,11 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { AlertCircle, TrendingUp } from "lucide-react"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const POLL_INTERVAL_MS = 5000 // 5 seconds (SEC-006)
+
 interface MarketData {
   timestamp: string
+  scan_id?: string
   polymarket: {
-    price_to_beat: number
-    current_price: number
+    price_to_beat: number | null
+    current_price: number | null
     prices: {
       Up: number
       Down: number
@@ -20,7 +24,7 @@ interface MarketData {
   }
   kalshi: {
     event_ticker: string
-    current_price: number
+    current_price: number | null
     markets: Array<{
       strike: number
       yes_ask: number
@@ -41,28 +45,43 @@ interface MarketData {
   }>
   opportunities: Array<any>
   errors: string[]
+  fee_disclaimer?: string
 }
 
 export default function Dashboard() {
   const [data, setData] = useState<MarketData | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+  const [dataAgeMs, setDataAgeMs] = useState(0)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   const fetchData = async () => {
     try {
-      const res = await fetch("http://localhost:8000/arbitrage")
+      const res = await fetch(`${API_URL}/arbitrage`)
       const json = await res.json()
       setData(json)
       setLastUpdated(new Date())
+      setDataAgeMs(0)
+      setFetchError(null)
       setLoading(false)
     } catch (err) {
+      setFetchError(`Failed to connect to API at ${API_URL}`)
+      setLoading(false)
       console.error("Failed to fetch data", err)
     }
   }
 
+  // Update data age every second
+  useEffect(() => {
+    const ageInterval = setInterval(() => {
+      setDataAgeMs(prev => prev + 1000)
+    }, 1000)
+    return () => clearInterval(ageInterval)
+  }, [])
+
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 1000)
+    const interval = setInterval(fetchData, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
   }, [])
 
@@ -74,20 +93,37 @@ export default function Dashboard() {
     ? data.opportunities.reduce((prev, current) => (prev.margin > current.margin) ? prev : current)
     : null
 
+  const dataAgeSec = (dataAgeMs / 1000).toFixed(1)
+  const isStale = dataAgeMs > 10000
+
   return (
     <div className="p-8 space-y-8 bg-slate-50 min-h-screen">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight">Arbitrage Bot Dashboard</h1>
-          <Badge variant="outline" className="animate-pulse bg-green-100 text-green-800 border-green-200">
-            <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
-            Live
+          <Badge variant="outline" className={`animate-pulse ${isStale ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-green-100 text-green-800 border-green-200'}`}>
+            <span className={`w-2 h-2 rounded-full ${isStale ? 'bg-yellow-500' : 'bg-green-500'} mr-2`}></span>
+            {isStale ? 'Stale' : 'Live'}
           </Badge>
         </div>
-        <div className="text-sm text-muted-foreground">
-          Last updated: {lastUpdated.toLocaleTimeString()}
+        <div className="text-sm text-muted-foreground space-y-0.5 text-right">
+          <div>Last updated: {lastUpdated.toLocaleTimeString()}</div>
+          <div className={`text-xs ${isStale ? 'text-yellow-600 font-medium' : ''}`}>
+            Data age: {dataAgeSec}s {isStale && '(stale)'}
+          </div>
+          {data.scan_id && <div className="text-xs font-mono">Scan: {data.scan_id}</div>}
         </div>
       </div>
+
+      {fetchError && (
+        <div className="bg-orange-50 border border-orange-200 text-orange-700 px-4 py-3 rounded-md flex items-start gap-2">
+          <AlertCircle className="h-5 w-5 mt-0.5" />
+          <div>
+            <strong className="font-bold block mb-1">Connection Error:</strong>
+            <p className="text-sm">{fetchError}</p>
+          </div>
+        </div>
+      )}
 
       {data.errors.length > 0 && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md flex items-start gap-2">
@@ -142,6 +178,11 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Fee Disclaimer */}
+      {data.fee_disclaimer && (
+        <p className="text-xs text-muted-foreground italic px-1">{data.fee_disclaimer}</p>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -1,27 +1,22 @@
 """
 Tier 1: Mock-based integration tests.
 
-These tests mock ONLY at the HTTP boundary (requests.get) and let all internal
-logic run naturally: slug generation, API response parsing, arbitrage detection,
-fee estimation, and response formatting.
-
-Unlike unit tests which mock individual functions, these verify the full pipeline.
+These tests mock at the fetch_*_data_struct level and let the arbitrage
+logic run naturally. They verify the full pipeline from API endpoint
+through to response formatting.
 """
 import json
 import os
 import datetime
 import pytest
 import pytz
-from unittest.mock import patch, MagicMock
-from fastapi.testclient import TestClient
-import requests as requests_lib
+from unittest.mock import patch, AsyncMock
+from httpx import AsyncClient, ASGITransport
 
-from api import app
+from api import app, clear_cache
 
 UTC = pytz.utc
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
-
-client = TestClient(app)
 
 
 def load_fixture(name):
@@ -29,102 +24,46 @@ def load_fixture(name):
         return json.load(f)
 
 
-# Frozen time: 2026-03-23 14:30:00 UTC = 10:30 AM ET (EDT)
-# Polymarket target = 14:00 UTC = 10:00 AM ET → slug: bitcoin-up-or-down-march-23-10am-et
-# Kalshi target = 15:00 UTC = 11:00 AM ET → ticker: KXBTCD-26MAR2311
-FROZEN_TIME = datetime.datetime(2026, 3, 23, 14, 30, 0, tzinfo=UTC)
-
-
-def make_mock_response(json_data, status_code=200):
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = json_data
-    mock_resp.status_code = status_code
-    mock_resp.raise_for_status.return_value = None
-    return mock_resp
-
-
-def make_error_response(status_code=500):
-    mock_resp = MagicMock()
-    mock_resp.status_code = status_code
-    mock_resp.raise_for_status.side_effect = requests_lib.exceptions.HTTPError(
-        f"{status_code} Server Error"
-    )
-    return mock_resp
-
-
-def build_router(poly_gamma, poly_clob_up, poly_clob_down, kalshi_markets,
-                 binance_price, binance_kline, overrides=None):
-    """
-    Build a side_effect function that routes requests.get calls
-    to different mock responses based on the URL.
-    overrides: dict mapping URL substring → response override (or 'error')
-    """
-    overrides = overrides or {}
-
-    def router(url, **kwargs):
-        # Check overrides first
-        for pattern, override in overrides.items():
-            if pattern in url:
-                if override == "error":
-                    return make_error_response(500)
-                elif override == "timeout":
-                    raise requests_lib.exceptions.Timeout("Connection timed out")
-                return make_mock_response(override)
-
-        params = kwargs.get("params", {})
-
-        if "gamma-api.polymarket.com" in url:
-            return make_mock_response(poly_gamma)
-        elif "clob.polymarket.com" in url:
-            token_id = params.get("token_id", "")
-            if "up" in token_id.lower():
-                return make_mock_response(poly_clob_up)
-            else:
-                return make_mock_response(poly_clob_down)
-        elif "elections.kalshi.com" in url:
-            return make_mock_response(kalshi_markets)
-        elif "binance.com" in url:
-            if "klines" in url:
-                return make_mock_response(binance_kline)
-            else:
-                return make_mock_response(binance_price)
-        return make_mock_response({})
-
-    return router
-
-
 @pytest.fixture
-def arb_fixtures():
-    """Fixture set that produces arbitrage. Up=0.48, Down=0.47 (sum=0.95)."""
+async def client():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+@pytest.fixture(autouse=True)
+def reset_cache():
+    """Clear the server-side cache before each test."""
+    clear_cache()
+
+
+def _make_poly_data(up, down, strike=95000.0, current=95500.0):
     return {
-        "poly_gamma": load_fixture("arb_poly_gamma.json"),
-        "poly_clob_up": load_fixture("arb_poly_clob_up.json"),
-        "poly_clob_down": load_fixture("arb_poly_clob_down.json"),
-        "kalshi_markets": load_fixture("arb_kalshi_markets.json"),
-        "binance_price": load_fixture("binance_price.json"),
-        "binance_kline": load_fixture("binance_kline.json"),
+        "price_to_beat": strike,
+        "current_price": current,
+        "prices": {"Up": up, "Down": down},
+        "slug": "bitcoin-up-or-down-march-23-10am-et",
+        "target_time_utc": datetime.datetime(2026, 3, 23, 14, 0, 0, tzinfo=UTC),
     }
 
 
-@pytest.fixture
-def noarb_fixtures():
-    """Fixture set that produces NO arbitrage. Up=0.55, Down=0.47 (sum=1.02)."""
+def _make_kalshi_data(markets, ticker="KXBTCD-26MAR2311", current=95500.0):
     return {
-        "poly_gamma": load_fixture("noarb_poly_gamma.json"),
-        "poly_clob_up": load_fixture("noarb_poly_clob_up.json"),
-        "poly_clob_down": load_fixture("noarb_poly_clob_down.json"),
-        "kalshi_markets": load_fixture("noarb_kalshi_markets.json"),
-        "binance_price": load_fixture("binance_price.json"),
-        "binance_kline": load_fixture("binance_kline.json"),
+        "event_ticker": ticker,
+        "current_price": current,
+        "markets": markets,
     }
 
 
-def _freeze_time_and_mock(mock_requests_get, mock_gcm_dt, fixtures, overrides=None):
-    """Common setup: freeze time and configure request routing."""
-    mock_gcm_dt.datetime.now.return_value = FROZEN_TIME
-    mock_gcm_dt.timedelta = datetime.timedelta
-    router = build_router(**fixtures, overrides=overrides or {})
-    mock_requests_get.side_effect = router
+def _make_kalshi_market(strike, yes_ask, no_ask, yes_bid=None, no_bid=None):
+    return {
+        "strike": strike,
+        "yes_bid": yes_bid or (1.0 - no_ask),
+        "yes_ask": yes_ask,
+        "no_bid": no_bid or (1.0 - yes_ask),
+        "no_ask": no_ask,
+        "subtitle": f"${int(strike):,} or above",
+    }
 
 
 # =====================================================================
@@ -132,15 +71,22 @@ def _freeze_time_and_mock(mock_requests_get, mock_gcm_dt, fixtures, overrides=No
 # =====================================================================
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineArbitrageFound:
-    """Happy path: realistic data produces arbitrage opportunities."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_arbitrage_found(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.48, 0.47), None)
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(94000, 0.42, 0.58),
+            _make_kalshi_market(94500, 0.38, 0.62),
+            _make_kalshi_market(95000, 0.35, 0.35),
+        ]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_arbitrage_found(self, mock_get, mock_dt, arb_fixtures):
-        _freeze_time_and_mock(mock_get, mock_dt, arb_fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         assert resp.status_code == 200
@@ -160,15 +106,22 @@ class TestFullPipelineArbitrageFound:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineNoArbitrage:
-    """Full pipeline with prices where all combos have total_cost >= $1.00."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_no_arbitrage(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(94000, 0.87, 0.14),
+            _make_kalshi_market(95000, 0.55, 0.49),
+            _make_kalshi_market(96000, 0.22, 0.79),
+        ]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_no_arbitrage(self, mock_get, mock_dt, noarb_fixtures):
-        _freeze_time_and_mock(mock_get, mock_dt, noarb_fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         assert resp.status_code == 200
@@ -180,34 +133,35 @@ class TestFullPipelineNoArbitrage:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineResponseStructure:
-    """Validate response JSON has all expected keys for frontend."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_api_response_structure(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(95000, 0.52, 0.49),
+        ]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_api_response_structure(self, mock_get, mock_dt, noarb_fixtures):
-        _freeze_time_and_mock(mock_get, mock_dt, noarb_fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
-        # Top-level keys
-        for key in ["timestamp", "polymarket", "kalshi", "checks", "opportunities", "errors"]:
+        for key in ["timestamp", "polymarket", "kalshi", "checks", "opportunities", "errors", "scan_id", "fee_disclaimer"]:
             assert key in data
 
-        # Polymarket structure
         poly = data["polymarket"]
         for key in ["price_to_beat", "current_price", "prices", "slug"]:
             assert key in poly
         assert "Up" in poly["prices"]
         assert "Down" in poly["prices"]
 
-        # Kalshi structure
         kalshi = data["kalshi"]
         for key in ["event_ticker", "current_price", "markets"]:
             assert key in kalshi
 
-        # Check structure
         if data["checks"]:
             check = data["checks"][0]
             for key in ["kalshi_strike", "kalshi_yes", "kalshi_no", "type",
@@ -217,16 +171,18 @@ class TestFullPipelineResponseStructure:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelinePolymarketDown:
-    """Polymarket Gamma API returns 500 → graceful error."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_polymarket_api_down(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (None, "Polymarket Error: 500 Server Error")
+        mock_kalshi.return_value = (_make_kalshi_data([]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_polymarket_api_down(self, mock_get, mock_dt, noarb_fixtures):
-        _freeze_time_and_mock(mock_get, mock_dt, noarb_fixtures,
-                              overrides={"gamma-api.polymarket.com": "error"})
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         assert resp.status_code == 200
@@ -236,16 +192,18 @@ class TestFullPipelinePolymarketDown:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineKalshiDown:
-    """Kalshi API returns 500 → graceful error."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_kalshi_api_down(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
+        mock_kalshi.return_value = (None, "Kalshi Error: API down")
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_kalshi_api_down(self, mock_get, mock_dt, noarb_fixtures):
-        _freeze_time_and_mock(mock_get, mock_dt, noarb_fixtures,
-                              overrides={"elections.kalshi.com": "error"})
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         assert resp.status_code == 200
@@ -254,41 +212,44 @@ class TestFullPipelineKalshiDown:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(None, "Binance down"))
 class TestFullPipelineBinanceDown:
-    """Binance API errors → pipeline degrades gracefully."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_binance_api_down(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        # Binance errors result in None prices but data still returned
+        mock_poly.return_value = ({
+            "price_to_beat": None,
+            "current_price": None,
+            "prices": {"Up": 0.55, "Down": 0.47},
+            "slug": "test",
+            "target_time_utc": None,
+        }, None)
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(95000, 0.52, 0.49),
+        ]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_binance_api_down(self, mock_get, mock_dt, noarb_fixtures):
-        _freeze_time_and_mock(mock_get, mock_dt, noarb_fixtures,
-                              overrides={"binance.com": "error"})
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
-
         assert resp.status_code == 200
-        # Binance errors don't prevent poly/kalshi data from being fetched,
-        # but price_to_beat and current_price may be None
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineStalePrices:
-    """Up+Down > 1.15 → sanity check triggers."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_stale_polymarket_prices(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.75, 0.75), None)  # Sum = 1.50 > 1.15
+        mock_kalshi.return_value = (_make_kalshi_data([]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_stale_polymarket_prices(self, mock_get, mock_dt, noarb_fixtures):
-        stale_clob_up = {"bids": [{"price": "0.73", "size": "100"}],
-                         "asks": [{"price": "0.75", "size": "100"}]}
-        stale_clob_down = {"bids": [{"price": "0.73", "size": "100"}],
-                           "asks": [{"price": "0.75", "size": "100"}]}
-        fixtures = dict(noarb_fixtures)
-        fixtures["poly_clob_up"] = stale_clob_up
-        fixtures["poly_clob_down"] = stale_clob_down
-
-        _freeze_time_and_mock(mock_get, mock_dt, fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         assert any("sanity check" in e for e in data["errors"])
@@ -296,31 +257,22 @@ class TestFullPipelineStalePrices:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineUnpricedMarkets:
-    """Markets with 0 asks are skipped."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_unpriced_kalshi_markets(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(94000, 0.88, 0.13),
+            _make_kalshi_market(95000, 0, 0),  # Unpriced
+            _make_kalshi_market(96000, 0.22, 0.79),
+        ]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_unpriced_kalshi_markets(self, mock_get, mock_dt, noarb_fixtures):
-        kalshi_with_unpriced = {
-            "markets": [
-                {"subtitle": "$94,000 or above",
-                 "yes_bid_dollars": "0.8700", "yes_ask_dollars": "0.8800",
-                 "no_bid_dollars": "0.1100", "no_ask_dollars": "0.1300"},
-                {"subtitle": "$95,000 or above",
-                 "yes_bid_dollars": "0.0000", "yes_ask_dollars": "0.0000",
-                 "no_bid_dollars": "0.0000", "no_ask_dollars": "0.0000"},
-                {"subtitle": "$96,000 or above",
-                 "yes_bid_dollars": "0.2000", "yes_ask_dollars": "0.2200",
-                 "no_bid_dollars": "0.7700", "no_ask_dollars": "0.7900"},
-            ]
-        }
-        fixtures = dict(noarb_fixtures)
-        fixtures["kalshi_markets"] = kalshi_with_unpriced
-
-        _freeze_time_and_mock(mock_get, mock_dt, fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         strikes_checked = [c["kalshi_strike"] for c in data["checks"]]
@@ -328,25 +280,20 @@ class TestFullPipelineUnpricedMarkets:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineEqualStrikes:
-    """Poly strike == Kalshi strike → both combos checked."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_equal_strikes(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.48, 0.47), None)
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(95000, 0.35, 0.35),
+        ]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_equal_strikes(self, mock_get, mock_dt, arb_fixtures):
-        kalshi_equal = {
-            "markets": [
-                {"subtitle": "$95,000 or above",
-                 "yes_bid_dollars": "0.3000", "yes_ask_dollars": "0.3500",
-                 "no_bid_dollars": "0.3000", "no_ask_dollars": "0.3500"},
-            ]
-        }
-        fixtures = dict(arb_fixtures)
-        fixtures["kalshi_markets"] = kalshi_equal
-
-        _freeze_time_and_mock(mock_get, mock_dt, fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         equal_checks = [c for c in data["checks"] if c["type"] == "Equal"]
@@ -357,40 +304,24 @@ class TestFullPipelineEqualStrikes:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineFeeErosion:
-    """Margin exists pre-fees but not post-fees."""
-
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_fee_erosion(self, mock_get, mock_dt):
-        # Poly Up=0.50, Down=0.48 (sum=0.98, passes sanity)
-        poly_gamma = load_fixture("noarb_poly_gamma.json")
-        tight_clob_up = {"bids": [{"price": "0.48", "size": "100"}],
-                         "asks": [{"price": "0.50", "size": "100"}]}
-        tight_clob_down = {"bids": [{"price": "0.46", "size": "100"}],
-                           "asks": [{"price": "0.48", "size": "100"}]}
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_fee_erosion(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        # Poly Up=0.50, Down=0.48, sum=0.98
+        mock_poly.return_value = (_make_poly_data(0.50, 0.48), None)
         # Kalshi market at $96K: poly_strike(95K) < kalshi(96K)
         # Strategy = Poly Up(0.50) + Kalshi No(0.48) = 0.98 → margin=0.02
         # Fees: 0.50*0.02 + 0.52*0.07 = 0.01+0.0364 = 0.0464 > 0.02 → NOT profitable
-        kalshi_tight = {
-            "markets": [
-                {"subtitle": "$96,000 or above",
-                 "yes_bid_dollars": "0.5100", "yes_ask_dollars": "0.5200",
-                 "no_bid_dollars": "0.4600", "no_ask_dollars": "0.4800"},
-            ]
-        }
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(96000, 0.52, 0.48),
+        ]), None)
 
-        fixtures = {
-            "poly_gamma": poly_gamma,
-            "poly_clob_up": tight_clob_up,
-            "poly_clob_down": tight_clob_down,
-            "kalshi_markets": kalshi_tight,
-            "binance_price": load_fixture("binance_price.json"),
-            "binance_kline": load_fixture("binance_kline.json"),
-        }
-        _freeze_time_and_mock(mock_get, mock_dt, fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         for opp in data["opportunities"]:
@@ -401,49 +332,60 @@ class TestFullPipelineFeeErosion:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineMultipleOpportunities:
-    """Multiple Kalshi strikes produce arb → all returned."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_multiple_opportunities(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.48, 0.47), None)
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(94000, 0.42, 0.58),
+            _make_kalshi_market(94500, 0.38, 0.62),
+            _make_kalshi_market(95000, 0.35, 0.35),
+        ]), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_multiple_opportunities(self, mock_get, mock_dt, arb_fixtures):
-        _freeze_time_and_mock(mock_get, mock_dt, arb_fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
-
-        # With poly Up=0.48, Down=0.47 and cheap Kalshi markets,
-        # multiple strikes should produce opportunities
         assert len(data["opportunities"]) >= 2
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineMarketWindow:
-    """Only ±4 markets around closest strike are checked."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_market_selection_window(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        markets = [_make_kalshi_market(90000 + i*500, 0.52, 0.49) for i in range(20)]
+        mock_poly.return_value = (_make_poly_data(0.55, 0.47), None)
+        mock_kalshi.return_value = (_make_kalshi_data(markets), None)
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_market_selection_window(self, mock_get, mock_dt, noarb_fixtures):
-        _freeze_time_and_mock(mock_get, mock_dt, noarb_fixtures)
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
-
-        # 9 Kalshi markets in fixture, ±4 window → max ~9 checks (or 10 with equal strike)
         assert len(data["checks"]) <= 11
 
 
 @pytest.mark.integration
 class TestCliBotFullPipeline:
-    """check_arbitrage() runs with mocked HTTP, verify stdout."""
-
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_cli_bot_full_pipeline(self, mock_get, mock_dt, arb_fixtures, capsys):
-        _freeze_time_and_mock(mock_get, mock_dt, arb_fixtures)
+    @patch('arbitrage_bot.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+    @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
+    async def test_cli_bot_full_pipeline(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (_make_poly_data(0.48, 0.47), None)
+        mock_kalshi.return_value = (_make_kalshi_data([
+            _make_kalshi_market(94000, 0.42, 0.58),
+        ]), None)
 
         from arbitrage_bot import check_arbitrage
-        check_arbitrage()
+        await check_arbitrage()
 
         captured = capsys.readouterr()
         assert "Scanning for arbitrage" in captured.out
@@ -453,17 +395,18 @@ class TestCliBotFullPipeline:
 
 
 @pytest.mark.integration
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
 class TestFullPipelineTimeout:
-    """requests.get raises Timeout → error propagated cleanly."""
+    @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
+    @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
+    @patch('api.create_session', new_callable=AsyncMock)
+    async def test_full_pipeline_timeout_handling(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
+        mock_session.return_value = AsyncMock()
+        mock_session.return_value.close = AsyncMock()
+        mock_poly.return_value = (None, "Connection timed out")
+        mock_kalshi.return_value = (None, "Connection timed out")
 
-    @patch("get_current_markets.datetime")
-    @patch("requests.get")
-    def test_full_pipeline_timeout_handling(self, mock_get, mock_dt):
-        mock_dt.datetime.now.return_value = FROZEN_TIME
-        mock_dt.timedelta = datetime.timedelta
-        mock_get.side_effect = requests_lib.exceptions.Timeout("Connection timed out")
-
-        resp = client.get("/arbitrage")
+        resp = await client.get("/arbitrage")
         data = resp.json()
 
         assert resp.status_code == 200

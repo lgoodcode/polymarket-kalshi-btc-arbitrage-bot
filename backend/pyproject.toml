@@ -4,3 +4,4 @@ markers = [
     "live: tests that hit real external APIs (skip by default)",
 ]
 testpaths = ["tests"]
+asyncio_mode = "auto"
