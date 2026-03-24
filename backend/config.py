@@ -53,7 +53,10 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))  # seconds
 CACHE_TTL = float(os.environ.get("CACHE_TTL", "3.0"))  # seconds
 
 # --- CORS ---
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+]
 
 # --- Logging ---
 LOG_DIR = os.environ.get("LOG_DIR", "logs")

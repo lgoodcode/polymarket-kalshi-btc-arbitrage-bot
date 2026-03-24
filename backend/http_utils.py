@@ -19,7 +19,12 @@ async def fetch_json(session: aiohttp.ClientSession, url: str, params: dict = No
 
     Raises on final failure after exhausting retries.
     """
-    last_error = None
+    last_error: Exception = aiohttp.ClientResponseError(
+        request_info=None,  # type: ignore[arg-type]
+        history=(),
+        status=429,
+        message=f"Rate limited on all {MAX_RETRIES} attempts for {url}",
+    )
     delay = RETRY_BASE_DELAY
 
     for attempt in range(1, MAX_RETRIES + 1):
@@ -27,6 +32,12 @@ async def fetch_json(session: aiohttp.ClientSession, url: str, params: dict = No
             async with session.get(url, params=params) as resp:
                 if resp.status == 429:
                     logger.warning("Rate limited (429) on %s, backing off %.1fs", url, RATE_LIMIT_BACKOFF)
+                    last_error = aiohttp.ClientResponseError(
+                        resp.request_info,
+                        resp.history,
+                        status=429,
+                        message=f"Rate limited (429) on {url}",
+                    )
                     await asyncio.sleep(RATE_LIMIT_BACKOFF)
                     continue
                 resp.raise_for_status()
@@ -41,4 +52,4 @@ async def fetch_json(session: aiohttp.ClientSession, url: str, params: dict = No
             else:
                 logger.error("All %d attempts failed for %s: %s", MAX_RETRIES, url, exc)
 
-    raise last_error  # type: ignore[misc]
+    raise last_error

@@ -17,10 +17,7 @@ from fetch_current_polymarket import fetch_polymarket_data_struct
 from fetch_current_kalshi import fetch_kalshi_data_struct
 from arbitrage import estimate_fees, add_fee_info, run_arbitrage_checks
 from http_utils import create_session
-from config import (
-    CORS_ORIGINS, PRICE_SUM_MIN, PRICE_SUM_MAX, CACHE_TTL,
-    POLYMARKET_FEE_RATE, KALSHI_FEE_RATE,
-)
+from config import CORS_ORIGINS, PRICE_SUM_MIN, PRICE_SUM_MAX, CACHE_TTL
 from log_config import setup_logging
 
 setup_logging()
@@ -145,19 +142,24 @@ async def get_arbitrage_data():
 async def health_check():
     """SEC-015: Health check endpoint for VPS monitoring."""
     import aiohttp
-    from config import POLYMARKET_GAMMA_URL, KALSHI_API_URL, BINANCE_PRICE_URL
+    from config import POLYMARKET_GAMMA_URL, KALSHI_API_URL, BINANCE_PRICE_URL, SYMBOL
+
+    health_targets = [
+        ("polymarket", POLYMARKET_GAMMA_URL, {"slug": "health-check"}),
+        ("kalshi", KALSHI_API_URL, {"limit": "1"}),
+        ("binance", BINANCE_PRICE_URL, {"symbol": SYMBOL}),
+    ]
 
     results = {}
     timeout = aiohttp.ClientTimeout(total=3)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        for name, url in [
-            ("polymarket", POLYMARKET_GAMMA_URL),
-            ("kalshi", KALSHI_API_URL),
-            ("binance", BINANCE_PRICE_URL),
-        ]:
+        for name, url, params in health_targets:
             try:
-                async with session.get(url) as resp:
-                    results[name] = {"status": "ok", "http_code": resp.status}
+                async with session.get(url, params=params) as resp:
+                    if resp.status >= 400:
+                        results[name] = {"status": "error", "http_code": resp.status}
+                    else:
+                        results[name] = {"status": "ok", "http_code": resp.status}
             except Exception as e:
                 results[name] = {"status": "error", "error": str(e)}
 

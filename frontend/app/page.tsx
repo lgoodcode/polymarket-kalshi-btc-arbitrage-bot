@@ -14,8 +14,8 @@ interface MarketData {
   timestamp: string
   scan_id?: string
   polymarket: {
-    price_to_beat: number
-    current_price: number
+    price_to_beat: number | null
+    current_price: number | null
     prices: {
       Up: number
       Down: number
@@ -24,7 +24,7 @@ interface MarketData {
   }
   kalshi: {
     event_ticker: string
-    current_price: number
+    current_price: number | null
     markets: Array<{
       strike: number
       yes_ask: number
@@ -66,6 +66,7 @@ export default function Dashboard() {
       setLoading(false)
     } catch (err) {
       setFetchError(`Failed to connect to API at ${API_URL}`)
+      setLoading(false)
       console.error("Failed to fetch data", err)
     }
   }

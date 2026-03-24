@@ -28,10 +28,17 @@ class JSONFormatter(logging.Formatter):
 
 
 def setup_logging():
-    """Configure root logger with file + console handlers."""
-    os.makedirs(LOG_DIR, exist_ok=True)
+    """Configure root logger with file + console handlers.
 
+    Idempotent — skips handler setup if already configured.
+    """
     root = logging.getLogger()
+
+    # Guard: don't add duplicate handlers on repeated calls
+    if root.handlers:
+        return root
+
+    os.makedirs(LOG_DIR, exist_ok=True)
     root.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.INFO))
 
     # Rotating file handler (JSON)

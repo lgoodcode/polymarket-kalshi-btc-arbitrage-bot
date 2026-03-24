@@ -66,8 +66,9 @@ async def fetch_polymarket_data_struct(session: aiohttp.ClientSession = None):
     """
     Fetch current Polymarket data. Returns (data_dict, error_string).
 
-    If price_to_beat or current_price cannot be fetched, returns error
-    instead of partial data (SEC-007).
+    If price_to_beat or current_price cannot be fetched from Binance,
+    they are set to None with a warning logged. The caller (api.py)
+    is responsible for checking None values before using them (SEC-007).
     """
     own_session = session is None
     if own_session:
