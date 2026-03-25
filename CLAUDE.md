@@ -219,6 +219,8 @@ npm run lint
 | `USAGE.md` | End-user guide: running the bot, understanding output |
 | `thesis.md` | Arbitrage theory and math |
 | `TEST_COVERAGE_ANALYSIS.md` | Living doc: test inventory, gaps, recommendations |
+| `IMPLEMENTATION_REFERENCE_REVIEW.md` | Review/validation of implementation reference doc with fix tracking |
+| `NEXT_STEPS.md` | Phased roadmap: detection fixes through production execution |
 
 ### Archived docs (`docs/archive/`)
 
