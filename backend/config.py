@@ -38,7 +38,8 @@ BINANCE_KLINES_URL = os.environ.get(
 SYMBOL = os.environ.get("SYMBOL", "BTCUSDT")
 
 # --- Fee multipliers (parabolic: multiplier * price * (1 - price)) ---
-# Polymarket crypto multiplier: 0.0624 until March 30 2026, 0.0720 after
+# Polymarket crypto multiplier default is 0.0624. Update to 0.0720 via
+# POLYMARKET_FEE_MULTIPLIER env var when the rate changes (target: March 30 2026).
 POLYMARKET_FEE_MULTIPLIER = float(os.environ.get("POLYMARKET_FEE_MULTIPLIER", "0.0624"))
 # Kalshi taker fee: ceil_to_cent(0.07 * price * (1 - price))
 KALSHI_FEE_MULTIPLIER = float(os.environ.get("KALSHI_FEE_MULTIPLIER", "0.07"))

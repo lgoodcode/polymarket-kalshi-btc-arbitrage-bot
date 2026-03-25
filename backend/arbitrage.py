@@ -17,7 +17,9 @@ def estimate_fees(poly_cost: float, kalshi_cost: float) -> float:
     poly_fee = POLYMARKET_FEE_MULTIPLIER * poly_pq if poly_pq > 0 else 0.0
 
     kalshi_pq = kalshi_cost * (1.0 - kalshi_cost)
-    kalshi_fee = math.ceil(KALSHI_FEE_MULTIPLIER * kalshi_pq * 100) / 100 if kalshi_pq > 0 else 0.0
+    # Subtract epsilon before ceil to avoid floating-point values like 1.0000000000001
+    # rounding up to the next cent when the true value is exactly on a cent boundary.
+    kalshi_fee = math.ceil(KALSHI_FEE_MULTIPLIER * kalshi_pq * 100 - 1e-9) / 100 if kalshi_pq > 0 else 0.0
 
     return round(poly_fee + kalshi_fee, 4)
 
