@@ -1,6 +1,7 @@
 import datetime
 import pytz
 import pytest
+from decimal import Decimal
 from unittest.mock import patch, AsyncMock
 
 from fetch_current_polymarket import (
@@ -20,22 +21,22 @@ class TestGetClobPrice:
     async def test_normal_orderbook(self, mock_fetch, sample_clob_response):
         mock_fetch.return_value = sample_clob_response
         price, size = await get_clob_price(AsyncMock(), "token123")
-        assert price == 0.47
-        assert size == 150.0
+        assert price == Decimal("0.47")
+        assert size == Decimal("150")
 
     @patch('fetch_current_polymarket.fetch_json', new_callable=AsyncMock)
     async def test_empty_asks(self, mock_fetch, sample_clob_response_empty_asks):
         mock_fetch.return_value = sample_clob_response_empty_asks
         price, size = await get_clob_price(AsyncMock(), "token123")
-        assert price == 0.0
-        assert size == 0.0
+        assert price == Decimal("0")
+        assert size == Decimal("0")
 
     @patch('fetch_current_polymarket.fetch_json', new_callable=AsyncMock)
     async def test_empty_bids_and_asks(self, mock_fetch, sample_clob_response_empty_both):
         mock_fetch.return_value = sample_clob_response_empty_both
         price, size = await get_clob_price(AsyncMock(), "token123")
-        assert price == 0.0
-        assert size == 0.0
+        assert price == Decimal("0")
+        assert size == Decimal("0")
 
     @patch('fetch_current_polymarket.fetch_json', new_callable=AsyncMock)
     async def test_multiple_asks_returns_lowest(self, mock_fetch):
@@ -44,8 +45,8 @@ class TestGetClobPrice:
             "asks": [{"price": "0.60", "size": "10"}, {"price": "0.55", "size": "20"}, {"price": "0.58", "size": "5"}]
         }
         price, size = await get_clob_price(AsyncMock(), "token123")
-        assert price == 0.55
-        assert size == 20.0
+        assert price == Decimal("0.55")
+        assert size == Decimal("20")
 
     @patch('fetch_current_polymarket.fetch_json', new_callable=AsyncMock)
     async def test_http_error_returns_none(self, mock_fetch):
@@ -141,7 +142,7 @@ class TestGetBinanceCurrentPrice:
     async def test_success(self, mock_fetch, sample_binance_price_response):
         mock_fetch.return_value = sample_binance_price_response
         price, err = await get_binance_current_price(AsyncMock())
-        assert price == 95500.0
+        assert price == Decimal("95500.00")
         assert err is None
 
     @patch('binance.fetch_json', new_callable=AsyncMock)
@@ -160,7 +161,7 @@ class TestGetBinanceOpenPrice:
         mock_fetch.return_value = sample_binance_kline_response
         t = datetime.datetime(2025, 12, 1, 14, 0, 0, tzinfo=UTC)
         price, err = await get_binance_open_price(AsyncMock(), t)
-        assert price == 95000.0
+        assert price == Decimal("95000.00")
         assert err is None
 
     @patch('binance.fetch_json', new_callable=AsyncMock)

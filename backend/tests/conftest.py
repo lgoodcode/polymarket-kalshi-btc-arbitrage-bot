@@ -3,6 +3,7 @@ import os
 import pytest
 import datetime
 import pytz
+from decimal import Decimal
 
 # Add backend to path so tests can import modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -84,10 +85,10 @@ def sample_binance_kline_response():
 @pytest.fixture
 def sample_poly_data():
     return {
-        "price_to_beat": 95000.0,
-        "current_price": 95500.0,
-        "prices": {"Up": 0.55, "Down": 0.47},
-        "depth": {"Up": 100.0, "Down": 200.0},
+        "price_to_beat": Decimal("95000"),
+        "current_price": Decimal("95500"),
+        "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.47")},
+        "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         "slug": "bitcoin-up-or-down-march-22-2pm-et",
         "target_time_utc": datetime.datetime(2026, 3, 22, 19, 0, 0, tzinfo=UTC)
     }
@@ -97,11 +98,11 @@ def sample_poly_data():
 def sample_kalshi_data():
     return {
         "event_ticker": "KXBTCD-26MAR2215",
-        "current_price": 95500.0,
+        "current_price": Decimal("95500"),
         "markets": [
-            {"strike": 94000.0, "yes_bid": 0.85, "yes_ask": 0.87, "no_bid": 0.12, "no_ask": 0.14, "subtitle": "$94,000 or above"},
-            {"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.52, "no_bid": 0.47, "no_ask": 0.49, "subtitle": "$95,000 or above"},
-            {"strike": 96000.0, "yes_bid": 0.20, "yes_ask": 0.22, "no_bid": 0.77, "no_ask": 0.79, "subtitle": "$96,000 or above"},
+            {"strike": Decimal("94000"), "yes_bid": Decimal("0.85"), "yes_ask": Decimal("0.87"), "no_bid": Decimal("0.12"), "no_ask": Decimal("0.14"), "subtitle": "$94,000 or above"},
+            {"strike": Decimal("95000"), "yes_bid": Decimal("0.50"), "yes_ask": Decimal("0.52"), "no_bid": Decimal("0.47"), "no_ask": Decimal("0.49"), "subtitle": "$95,000 or above"},
+            {"strike": Decimal("96000"), "yes_bid": Decimal("0.20"), "yes_ask": Decimal("0.22"), "no_bid": Decimal("0.77"), "no_ask": Decimal("0.79"), "subtitle": "$96,000 or above"},
         ]
     }
 
@@ -111,11 +112,11 @@ def sample_kalshi_data_with_unpriced():
     """Kalshi data where some markets have 0 ask prices."""
     return {
         "event_ticker": "KXBTCD-26MAR2215",
-        "current_price": 95500.0,
+        "current_price": Decimal("95500"),
         "markets": [
-            {"strike": 94000.0, "yes_bid": 0.85, "yes_ask": 0.87, "no_bid": 0.12, "no_ask": 0.14, "subtitle": "$94,000 or above"},
-            {"strike": 95000.0, "yes_bid": 0, "yes_ask": 0, "no_bid": 0, "no_ask": 0, "subtitle": "$95,000 or above"},
-            {"strike": 96000.0, "yes_bid": 0.20, "yes_ask": 0.22, "no_bid": 0.77, "no_ask": 0.79, "subtitle": "$96,000 or above"},
+            {"strike": Decimal("94000"), "yes_bid": Decimal("0.85"), "yes_ask": Decimal("0.87"), "no_bid": Decimal("0.12"), "no_ask": Decimal("0.14"), "subtitle": "$94,000 or above"},
+            {"strike": Decimal("95000"), "yes_bid": Decimal("0"), "yes_ask": Decimal("0"), "no_bid": Decimal("0"), "no_ask": Decimal("0"), "subtitle": "$95,000 or above"},
+            {"strike": Decimal("96000"), "yes_bid": Decimal("0.20"), "yes_ask": Decimal("0.22"), "no_bid": Decimal("0.77"), "no_ask": Decimal("0.79"), "subtitle": "$96,000 or above"},
         ]
     }
 
@@ -124,10 +125,10 @@ def sample_kalshi_data_with_unpriced():
 def arb_poly_data():
     """Polymarket data designed to produce an arbitrage opportunity."""
     return {
-        "price_to_beat": 95000.0,
-        "current_price": 95500.0,
-        "prices": {"Up": 0.40, "Down": 0.35},
-        "depth": {"Up": 100.0, "Down": 200.0},
+        "price_to_beat": Decimal("95000"),
+        "current_price": Decimal("95500"),
+        "prices": {"Up": Decimal("0.40"), "Down": Decimal("0.35")},
+        "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         "slug": "bitcoin-up-or-down-march-22-2pm-et",
         "target_time_utc": datetime.datetime(2026, 3, 22, 19, 0, 0, tzinfo=UTC)
     }
@@ -138,8 +139,8 @@ def arb_kalshi_data():
     """Kalshi data designed to produce an arbitrage with arb_poly_data."""
     return {
         "event_ticker": "KXBTCD-26MAR2215",
-        "current_price": 95500.0,
+        "current_price": Decimal("95500"),
         "markets": [
-            {"strike": 94000.0, "yes_bid": 0.40, "yes_ask": 0.42, "no_bid": 0.55, "no_ask": 0.58, "subtitle": "$94,000 or above"},
+            {"strike": Decimal("94000"), "yes_bid": Decimal("0.40"), "yes_ask": Decimal("0.42"), "no_bid": Decimal("0.55"), "no_ask": Decimal("0.58"), "subtitle": "$94,000 or above"},
         ]
     }

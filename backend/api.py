@@ -6,12 +6,17 @@ Includes server-side caching (SEC-006) and CORS restriction (SEC-004).
 """
 import asyncio
 import datetime
+import json
 import logging
 import time
 import uuid
+from decimal import Decimal
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from decimal_utils import decimal_to_json
 
 from fetch_current_polymarket import fetch_polymarket_data_struct
 from fetch_current_kalshi import fetch_kalshi_data_struct
@@ -90,16 +95,18 @@ async def get_arbitrage_data():
 
     if not poly_data or not kalshi_data:
         logger.warning("Scan %s: missing data (poly_err=%s, kalshi_err=%s)", scan_id, poly_err, kalshi_err)
+        response = decimal_to_json(response)
         _cache["data"] = response
         _cache["timestamp"] = now
         return response
 
     poly_strike = poly_data["price_to_beat"]
-    poly_up_cost = poly_data["prices"].get("Up", 0.0)
-    poly_down_cost = poly_data["prices"].get("Down", 0.0)
+    poly_up_cost = poly_data["prices"].get("Up", Decimal("0"))
+    poly_down_cost = poly_data["prices"].get("Down", Decimal("0"))
 
     if poly_strike is None:
         response["errors"].append("Polymarket Strike is None")
+        response = decimal_to_json(response)
         _cache["data"] = response
         _cache["timestamp"] = now
         return response
@@ -108,8 +115,9 @@ async def get_arbitrage_data():
     poly_sum = poly_up_cost + poly_down_cost
     if poly_sum > 0 and (poly_sum < PRICE_SUM_MIN or poly_sum > PRICE_SUM_MAX):
         response["errors"].append(
-            f"Polymarket price sanity check failed: Up ({poly_up_cost:.3f}) + Down ({poly_down_cost:.3f}) = {poly_sum:.3f}, expected ~1.00"
+            f"Polymarket price sanity check failed: Up ({float(poly_up_cost):.3f}) + Down ({float(poly_down_cost):.3f}) = {float(poly_sum):.3f}, expected ~1.00"
         )
+        response = decimal_to_json(response)
         _cache["data"] = response
         _cache["timestamp"] = now
         return response
@@ -141,6 +149,8 @@ async def get_arbitrage_data():
     else:
         logger.debug("Scan %s: no arbitrage found", scan_id)
 
+    # Convert Decimal values to float for JSON serialization
+    response = decimal_to_json(response)
     _cache["data"] = response
     _cache["timestamp"] = now
     return response
@@ -173,6 +183,131 @@ async def health_check():
 
     all_ok = all(r["status"] == "ok" for r in results.values())
     return {"status": "healthy" if all_ok else "degraded", "services": results}
+
+
+# --- Execution endpoints ---
+
+
+@app.get("/execution/status")
+async def execution_status():
+    """Return current execution configuration state."""
+    from config import EXECUTION_ENABLED, EXECUTION_DRY_RUN, KALSHI_API_BASE_URL
+
+    return {
+        "enabled": EXECUTION_ENABLED,
+        "dry_run": EXECUTION_DRY_RUN,
+        "kalshi_environment": "demo" if "demo" in KALSHI_API_BASE_URL else "production",
+    }
+
+
+@app.post("/execute")
+async def execute_arbitrage(body: dict):
+    """Execute an arbitrage opportunity.
+
+    Requires EXECUTION_ENABLED=true. Dry-run by default.
+
+    Body: {
+        "poly_token_id": str,
+        "kalshi_ticker": str,
+        "opportunity": dict,   # from /arbitrage response
+        "size": int (optional, default from config),
+        "strategy": str (optional, "maker_first" or "parallel")
+    }
+    """
+    from config import (
+        EXECUTION_ENABLED, EXECUTION_DRY_RUN, DEFAULT_ORDER_SIZE,
+        KALSHI_API_BASE_URL, KALSHI_API_KEY_ID, KALSHI_PRIVATE_KEY_PATH,
+        POLYMARKET_HOST, POLYMARKET_PRIVATE_KEY, POLYMARKET_CHAIN_ID,
+    )
+
+    if not EXECUTION_ENABLED:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Execution is disabled. Set EXECUTION_ENABLED=true to enable."},
+        )
+
+    # Validate required fields
+    for field in ("poly_token_id", "kalshi_ticker", "opportunity"):
+        if field not in body:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Missing required field: {field}"},
+            )
+
+    opportunity = body["opportunity"]
+    size = body.get("size", DEFAULT_ORDER_SIZE)
+    strategy = body.get("strategy", "maker_first")
+
+    # Initialize clients
+    from execution.kalshi_client import KalshiClient
+    from execution.polymarket_client import PolymarketClient
+    from execution.engine import ExecutionEngine
+
+    kalshi_client = KalshiClient(
+        base_url=KALSHI_API_BASE_URL,
+        api_key_id=KALSHI_API_KEY_ID,
+        private_key_path=KALSHI_PRIVATE_KEY_PATH,
+    )
+    ok, err = kalshi_client.initialize()
+    if not ok:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Kalshi client init failed: {err}"},
+        )
+
+    poly_client = PolymarketClient(
+        host=POLYMARKET_HOST,
+        private_key=POLYMARKET_PRIVATE_KEY,
+        chain_id=POLYMARKET_CHAIN_ID,
+    )
+    ok, err = poly_client.initialize()
+    if not ok:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Polymarket client init failed: {err}"},
+        )
+
+    engine = ExecutionEngine(poly_client, kalshi_client, dry_run=EXECUTION_DRY_RUN)
+    plan = engine.build_execution_plan(
+        opportunity,
+        poly_token_id=body["poly_token_id"],
+        kalshi_ticker=body["kalshi_ticker"],
+        size=size,
+        strategy=strategy,
+    )
+
+    session = await create_session()
+    try:
+        result = await engine.execute(session, plan)
+    finally:
+        await session.close()
+
+    # Convert Decimal values for JSON serialization
+    def _serialize(obj):
+        if hasattr(obj, '__dataclass_fields__'):
+            from dataclasses import asdict
+            return asdict(obj)
+        return obj
+
+    from dataclasses import asdict
+    result_dict = asdict(result)
+
+    # Convert Decimal to float for JSON
+    def _decimal_to_float(d):
+        if isinstance(d, dict):
+            return {k: _decimal_to_float(v) for k, v in d.items()}
+        if isinstance(d, list):
+            return [_decimal_to_float(v) for v in d]
+        if isinstance(d, Decimal):
+            return float(d)
+        return d
+
+    from decimal import Decimal
+    return _decimal_to_float(result_dict)
 
 
 if __name__ == "__main__":

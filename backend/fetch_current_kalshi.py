@@ -4,6 +4,7 @@ Retrieves BTC event markets from the Kalshi API and current price from Binance.
 """
 import re
 import logging
+from decimal import Decimal
 import aiohttp
 from get_current_markets import get_current_market_urls
 from http_utils import fetch_json, create_session
@@ -27,11 +28,11 @@ def parse_strike(subtitle: str):
     """
     Extract strike price from a Kalshi subtitle like "$96,250 or above".
 
-    Returns float or None. Logs a warning when parsing fails (SEC-013).
+    Returns Decimal or None. Logs a warning when parsing fails (SEC-013).
     """
     match = re.search(r'\$([\d,]+)', subtitle)
     if match:
-        return float(match.group(1).replace(",", ""))
+        return Decimal(match.group(1).replace(",", ""))
     logger.warning("Failed to parse strike from subtitle: %r", subtitle)
     return None
 
@@ -69,10 +70,10 @@ async def fetch_kalshi_data_struct(session: aiohttp.ClientSession = None, binanc
             strike = parse_strike(m.get("subtitle", ""))
             if strike is not None and strike > 0:
                 # Kalshi API returns *_dollars fields as strings
-                yes_bid = float(m.get("yes_bid_dollars", "0"))
-                yes_ask = float(m.get("yes_ask_dollars", "0"))
-                no_bid = float(m.get("no_bid_dollars", "0"))
-                no_ask = float(m.get("no_ask_dollars", "0"))
+                yes_bid = Decimal(m.get("yes_bid_dollars", "0"))
+                yes_ask = Decimal(m.get("yes_ask_dollars", "0"))
+                no_bid = Decimal(m.get("no_bid_dollars", "0"))
+                no_ask = Decimal(m.get("no_ask_dollars", "0"))
                 market_data.append({
                     "strike": strike,
                     "yes_bid": yes_bid,
