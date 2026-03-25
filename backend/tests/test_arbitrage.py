@@ -5,25 +5,31 @@ from arbitrage import estimate_fees, add_fee_info, run_arbitrage_checks
 
 class TestEstimateFees:
     def test_both_half(self):
+        # poly: 0.0624 * 0.5 * 0.5 = 0.0156, kalshi: ceil(0.07 * 0.25 * 100)/100 = 0.02
         result = estimate_fees(0.50, 0.50)
-        assert result == 0.045
+        assert result == 0.0356
 
     def test_both_zero_cost(self):
+        # p*(1-p) = 0 for both → no fees
         result = estimate_fees(0.0, 0.0)
-        assert result == 0.09
+        assert result == 0.0
 
     def test_both_at_one(self):
         result = estimate_fees(1.0, 1.0)
         assert result == 0.0
 
     def test_one_at_one(self):
+        # poly: 0 (p=1), kalshi: ceil(0.07 * 0.5 * 0.5 * 100)/100 = 0.02
         result = estimate_fees(1.0, 0.50)
-        assert result == 0.035
+        assert result == 0.02
 
     def test_typical_arb_costs(self):
+        # poly: 0.0624 * 0.48 * 0.52, kalshi: ceil(0.07 * 0.51 * 0.49 * 100)/100
         result = estimate_fees(0.48, 0.51)
-        expected = round((0.52 * 0.02) + (0.49 * 0.07), 4)
-        assert result == expected
+        import math
+        expected_poly = 0.0624 * 0.48 * 0.52
+        expected_kalshi = math.ceil(0.07 * 0.51 * 0.49 * 100) / 100
+        assert result == round(expected_poly + expected_kalshi, 4)
 
     def test_above_one_no_fees(self):
         result = estimate_fees(1.5, 1.5)

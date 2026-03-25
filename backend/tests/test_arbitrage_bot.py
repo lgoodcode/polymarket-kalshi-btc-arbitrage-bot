@@ -13,11 +13,11 @@ UTC = pytz.utc
 class TestEstimateFees:
     def test_both_half(self):
         result = _estimate_fees(0.50, 0.50)
-        assert result == 0.045
+        assert result == 0.0356
 
     def test_both_zero(self):
         result = _estimate_fees(0.0, 0.0)
-        assert result == 0.09
+        assert result == 0.0
 
     def test_both_one(self):
         result = _estimate_fees(1.0, 1.0)
@@ -25,7 +25,7 @@ class TestEstimateFees:
 
     def test_one_at_one(self):
         result = _estimate_fees(1.0, 0.50)
-        assert result == 0.035
+        assert result == 0.02
 
 
 # --- check_arbitrage tests ---
@@ -51,7 +51,7 @@ class TestCheckArbitrage:
     async def test_kalshi_error(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
-        mock_poly.return_value = ({"price_to_beat": 95000.0, "prices": {"Up": 0.55, "Down": 0.47}}, None)
+        mock_poly.return_value = ({"price_to_beat": 95000.0, "prices": {"Up": 0.55, "Down": 0.47}, "depth": {"Up": 100.0, "Down": 200.0}}, None)
         mock_kalshi.return_value = (None, "Kalshi Error: API down")
 
         await check_arbitrage()
@@ -81,6 +81,7 @@ class TestCheckArbitrage:
             "price_to_beat": None,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
@@ -101,6 +102,7 @@ class TestCheckArbitrage:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.30, "Down": 0.30},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
@@ -122,6 +124,7 @@ class TestCheckArbitrage:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
@@ -142,6 +145,7 @@ class TestCheckArbitrage:
             "price_to_beat": 96000.0,
             "current_price": 96500.0,
             "prices": {"Up": 0.60, "Down": 0.35},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 96500.0,
@@ -166,6 +170,7 @@ class TestCheckArbitrage:
             "price_to_beat": 94000.0,
             "current_price": 94500.0,
             "prices": {"Up": 0.35, "Down": 0.60},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 94500.0,
@@ -190,6 +195,7 @@ class TestCheckArbitrage:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.45, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
@@ -213,6 +219,7 @@ class TestCheckArbitrage:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
@@ -235,6 +242,7 @@ class TestCheckArbitrage:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 95500.0,
@@ -258,6 +266,7 @@ class TestCheckArbitrage:
             "price_to_beat": 96000.0,
             "current_price": 96500.0,
             "prices": {"Up": 0.55, "Down": 0.40},
+            "depth": {"Up": 100.0, "Down": 200.0},
         }, None)
         mock_kalshi.return_value = ({
             "event_ticker": "TEST", "current_price": 96500.0,

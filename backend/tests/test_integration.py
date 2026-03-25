@@ -42,6 +42,7 @@ def _make_poly_data(up, down, strike=95000.0, current=95500.0):
         "price_to_beat": strike,
         "current_price": current,
         "prices": {"Up": up, "Down": down},
+        "depth": {"Up": 100.0, "Down": 200.0},
         "slug": "bitcoin-up-or-down-march-23-10am-et",
         "target_time_utc": datetime.datetime(2026, 3, 23, 14, 0, 0, tzinfo=UTC),
     }
@@ -225,6 +226,7 @@ class TestFullPipelineBinanceDown:
             "price_to_beat": None,
             "current_price": None,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -316,7 +318,7 @@ class TestFullPipelineFeeErosion:
         mock_poly.return_value = (_make_poly_data(0.50, 0.48), None)
         # Kalshi market at $96K: poly_strike(95K) < kalshi(96K)
         # Strategy = Poly Up(0.50) + Kalshi No(0.48) = 0.98 → margin=0.02
-        # Fees: 0.50*0.02 + 0.52*0.07 = 0.01+0.0364 = 0.0464 > 0.02 → NOT profitable
+        # Fees: 0.0624*0.50*0.50 + ceil(0.07*0.48*0.52*100)/100 = 0.0156+0.02 = 0.0356 > 0.02 → NOT profitable
         mock_kalshi.return_value = (_make_kalshi_data([
             _make_kalshi_market(96000, 0.52, 0.48),
         ]), None)
@@ -390,6 +392,7 @@ class TestCliBotFullPipeline:
         captured = capsys.readouterr()
         assert "Scanning for arbitrage" in captured.out
         assert "POLYMARKET" in captured.out
+        assert "avail" in captured.out
         assert "ARBITRAGE FOUND" in captured.out
         assert "Est. Fees" in captured.out
 

@@ -68,18 +68,11 @@ async def fetch_kalshi_data_struct(session: aiohttp.ClientSession = None, binanc
         for m in markets:
             strike = parse_strike(m.get("subtitle", ""))
             if strike is not None and strike > 0:
-                # Kalshi API returns *_dollars fields as strings (post-March 2026)
-                if "yes_ask_dollars" in m:
-                    yes_bid = float(m.get("yes_bid_dollars", "0"))
-                    yes_ask = float(m.get("yes_ask_dollars", "0"))
-                    no_bid = float(m.get("no_bid_dollars", "0"))
-                    no_ask = float(m.get("no_ask_dollars", "0"))
-                else:
-                    # Legacy integer cent fields (pre-March 2026)
-                    yes_bid = m.get("yes_bid", 0) / 100.0
-                    yes_ask = m.get("yes_ask", 0) / 100.0
-                    no_bid = m.get("no_bid", 0) / 100.0
-                    no_ask = m.get("no_ask", 0) / 100.0
+                # Kalshi API returns *_dollars fields as strings
+                yes_bid = float(m.get("yes_bid_dollars", "0"))
+                yes_ask = float(m.get("yes_ask_dollars", "0"))
+                no_bid = float(m.get("no_bid_dollars", "0"))
+                no_ask = float(m.get("no_ask_dollars", "0"))
                 market_data.append({
                     "strike": strike,
                     "yes_bid": yes_bid,

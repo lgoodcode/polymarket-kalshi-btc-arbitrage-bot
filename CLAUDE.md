@@ -157,8 +157,8 @@ npm run lint
 
 ## Key Technical Details
 
-- **Kalshi API**: Uses `_dollars` string fields (e.g., `"yes_ask_dollars": "0.5600"`). Legacy integer cent fields were removed March 12, 2026. The code has backward compat for both formats in `fetch_current_kalshi.py`.
-- **Polymarket prices**: Fetched from CLOB order book (best ask). Up + Down should sum to ~$1.00.
+- **Kalshi API**: Uses `_dollars` string fields (e.g., `"yes_ask_dollars": "0.5600"`). Legacy integer cent fields were removed from the API on March 12, 2026; legacy parsing code removed from `fetch_current_kalshi.py`.
+- **Polymarket prices**: Fetched from CLOB order book (best ask + depth/size). Up + Down should sum to ~$1.00.
 - **Arbitrage logic**: If Poly cost + Kalshi cost < $1.00 for complementary contracts, risk-free profit exists.
 - **Time handling**: All slugs use Eastern Time (ET). Polymarket uses current hour; Kalshi uses next hour's identifier (+1 hour offset).
 
@@ -170,7 +170,7 @@ npm run lint
 - **Error pattern**: Functions return `(data, error_string)` tuples instead of raising exceptions. The API collects errors into a response array.
 - **HTTP requests**: All external calls use `aiohttp` via `http_utils.fetch_json()` with retry + exponential backoff. Timeout configurable via `config.py` (default 10s).
 - **No `eval()`**: Use `json.loads()` for parsing JSON strings. Legacy files containing `eval()` have been deleted.
-- **Fee constants**: Polymarket 2% on profit, Kalshi 7% on profit
+- **Fee formulas**: Parabolic `multiplier * price * (1 - price)`. Polymarket crypto multiplier = 0.0624 (env: `POLYMARKET_FEE_MULTIPLIER`), Kalshi = 0.07 with ceil-to-cent rounding (env: `KALSHI_FEE_MULTIPLIER`)
 - **Price sanity check**: Up + Down prices must be between 0.85 and 1.15; outside this range indicates stale data
 - **Logging**: Python `logging` module with rotating JSON file handler (`logs/arbitrage.log`) + console handler. `print()` retained for CLI bot user-facing output alongside logging.
 

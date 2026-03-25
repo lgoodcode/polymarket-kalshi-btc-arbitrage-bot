@@ -3,16 +3,23 @@
 Contains fee estimation and the core comparison engine used by both
 api.py (FastAPI) and arbitrage_bot.py (CLI).
 """
-from config import POLYMARKET_FEE_RATE, KALSHI_FEE_RATE
+import math
+from config import POLYMARKET_FEE_MULTIPLIER, KALSHI_FEE_MULTIPLIER
 
 
 def estimate_fees(poly_cost: float, kalshi_cost: float) -> float:
-    """Estimate trading fees for both legs. Returns total estimated fees."""
-    poly_profit = 1.00 - poly_cost
-    poly_fee = poly_profit * POLYMARKET_FEE_RATE if poly_profit > 0 else 0
+    """Estimate trading fees for both legs using parabolic fee formulas.
 
-    kalshi_profit = 1.00 - kalshi_cost
-    kalshi_fee = kalshi_profit * KALSHI_FEE_RATE if kalshi_profit > 0 else 0
+    Polymarket: multiplier * price * (1 - price)
+    Kalshi: ceil_to_cent(multiplier * price * (1 - price))
+    """
+    poly_pq = poly_cost * (1.0 - poly_cost)
+    poly_fee = POLYMARKET_FEE_MULTIPLIER * poly_pq if poly_pq > 0 else 0.0
+
+    kalshi_pq = kalshi_cost * (1.0 - kalshi_cost)
+    # Subtract epsilon before ceil to avoid floating-point values like 1.0000000000001
+    # rounding up to the next cent when the true value is exactly on a cent boundary.
+    kalshi_fee = math.ceil(KALSHI_FEE_MULTIPLIER * kalshi_pq * 100 - 1e-9) / 100 if kalshi_pq > 0 else 0.0
 
     return round(poly_fee + kalshi_fee, 4)
 

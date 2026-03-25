@@ -60,9 +60,9 @@ def sample_poly_event_response_reversed_outcomes():
 def sample_kalshi_api_response():
     return {
         "markets": [
-            {"subtitle": "$94,000 or above", "yes_bid": 85, "yes_ask": 87, "no_bid": 12, "no_ask": 14},
-            {"subtitle": "$95,000 or above", "yes_bid": 50, "yes_ask": 52, "no_bid": 47, "no_ask": 49},
-            {"subtitle": "$96,000 or above", "yes_bid": 20, "yes_ask": 22, "no_bid": 77, "no_ask": 79},
+            {"subtitle": "$94,000 or above", "yes_bid_dollars": "0.8500", "yes_ask_dollars": "0.8700", "no_bid_dollars": "0.1200", "no_ask_dollars": "0.1400"},
+            {"subtitle": "$95,000 or above", "yes_bid_dollars": "0.5000", "yes_ask_dollars": "0.5200", "no_bid_dollars": "0.4700", "no_ask_dollars": "0.4900"},
+            {"subtitle": "$96,000 or above", "yes_bid_dollars": "0.2000", "yes_ask_dollars": "0.2200", "no_bid_dollars": "0.7700", "no_ask_dollars": "0.7900"},
         ]
     }
 
@@ -87,6 +87,7 @@ def sample_poly_data():
         "price_to_beat": 95000.0,
         "current_price": 95500.0,
         "prices": {"Up": 0.55, "Down": 0.47},
+        "depth": {"Up": 100.0, "Down": 200.0},
         "slug": "bitcoin-up-or-down-march-22-2pm-et",
         "target_time_utc": datetime.datetime(2026, 3, 22, 19, 0, 0, tzinfo=UTC)
     }
@@ -126,6 +127,7 @@ def arb_poly_data():
         "price_to_beat": 95000.0,
         "current_price": 95500.0,
         "prices": {"Up": 0.40, "Down": 0.35},
+        "depth": {"Up": 100.0, "Down": 200.0},
         "slug": "bitcoin-up-or-down-march-22-2pm-et",
         "target_time_utc": datetime.datetime(2026, 3, 22, 19, 0, 0, tzinfo=UTC)
     }
