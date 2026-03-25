@@ -15,18 +15,24 @@ logger = logging.getLogger(__name__)
 
 
 async def get_clob_price(session: aiohttp.ClientSession, token_id: str):
-    """Fetch best ask from the Polymarket CLOB order book. Returns float or None."""
+    """Fetch best ask from the Polymarket CLOB order book.
+
+    Returns (price, size) tuple. Returns (None, None) on error,
+    (0.0, 0.0) when no asks are available.
+    """
     try:
         data = await fetch_json(session, POLYMARKET_CLOB_URL, params={"token_id": token_id})
 
         asks = data.get("asks", [])
         if asks:
-            best_ask = min(float(a["price"]) for a in asks)
-            return best_ask if best_ask > 0 else 0.0
-        return 0.0
+            best = min(asks, key=lambda a: float(a["price"]))
+            price = float(best["price"])
+            size = float(best.get("size", "0"))
+            return (price, size) if price > 0 else (0.0, 0.0)
+        return (0.0, 0.0)
     except Exception as e:
         logger.error("CLOB price fetch failed for token %s: %s", token_id, e)
-        return None
+        return (None, None)
 
 
 async def get_polymarket_data(session: aiohttp.ClientSession, slug: str):
@@ -53,14 +59,16 @@ async def get_polymarket_data(session: aiohttp.ClientSession, slug: str):
             return None, f"Mismatched outcomes ({len(outcomes)}) and token IDs ({len(clob_token_ids)})"
 
         prices = {}
+        depth = {}
         for outcome, token_id in zip(outcomes, clob_token_ids):
-            price = await get_clob_price(session, token_id)
+            price, size = await get_clob_price(session, token_id)
             if price is not None:
                 prices[outcome] = price
+                depth[outcome] = size
             else:
                 return None, f"Failed to fetch CLOB price for {outcome} (token: {token_id})"
 
-        return prices, None
+        return {"prices": prices, "depth": depth}, None
     except Exception as e:
         return None, str(e)
 
@@ -86,7 +94,7 @@ async def fetch_polymarket_data_struct(session: aiohttp.ClientSession = None, bi
         target_time_utc = market_info["target_time_utc"]
         slug = polymarket_url.split("/")[-1]
 
-        poly_prices, poly_err = await get_polymarket_data(session, slug)
+        poly_result, poly_err = await get_polymarket_data(session, slug)
         if poly_err:
             return None, f"Polymarket Error: {poly_err}"
 
@@ -105,7 +113,8 @@ async def fetch_polymarket_data_struct(session: aiohttp.ClientSession = None, bi
         return {
             "price_to_beat": price_to_beat,
             "current_price": current_price,
-            "prices": poly_prices,
+            "prices": poly_result["prices"],
+            "depth": poly_result["depth"],
             "slug": slug,
             "target_time_utc": target_time_utc,
         }, None
@@ -140,7 +149,9 @@ async def main():
 
     up_price = data["prices"].get("Up", 0)
     down_price = data["prices"].get("Down", 0)
-    print(f"BUY: UP ${up_price:.3f} & DOWN ${down_price:.3f}")
+    up_depth = data["depth"].get("Up", 0)
+    down_depth = data["depth"].get("Down", 0)
+    print(f"BUY: UP ${up_price:.3f} ({up_depth:.0f} avail) & DOWN ${down_price:.3f} ({down_depth:.0f} avail)")
 
 
 if __name__ == "__main__":

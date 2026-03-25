@@ -22,11 +22,11 @@ async def client():
 class TestEstimateFees:
     def test_both_half(self):
         result = _estimate_fees(0.50, 0.50)
-        assert result == 0.045
+        assert result == 0.0356
 
     def test_both_zero_cost(self):
         result = _estimate_fees(0.0, 0.0)
-        assert result == 0.09
+        assert result == 0.0
 
     def test_both_at_one(self):
         result = _estimate_fees(1.0, 1.0)
@@ -34,11 +34,12 @@ class TestEstimateFees:
 
     def test_one_at_one(self):
         result = _estimate_fees(1.0, 0.50)
-        assert result == 0.035
+        assert result == 0.02
 
     def test_typical_arb_costs(self):
+        import math
         result = _estimate_fees(0.48, 0.51)
-        expected = round((0.52 * 0.02) + (0.49 * 0.07), 4)
+        expected = round(0.0624 * 0.48 * 0.52 + math.ceil(0.07 * 0.51 * 0.49 * 100) / 100, 4)
         assert result == expected
 
     def test_above_one_no_fees(self):
@@ -98,7 +99,7 @@ class TestGetArbitrageData:
     async def test_kalshi_error(self, mock_session, mock_poly, mock_kalshi, mock_binance, client):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
-        mock_poly.return_value = ({"price_to_beat": 95000.0, "current_price": 95500.0, "prices": {"Up": 0.55, "Down": 0.47}, "slug": "test", "target_time_utc": None}, None)
+        mock_poly.return_value = ({"price_to_beat": 95000.0, "current_price": 95500.0, "prices": {"Up": 0.55, "Down": 0.47}, "depth": {"Up": 100.0, "Down": 200.0}, "slug": "test", "target_time_utc": None}, None)
         mock_kalshi.return_value = (None, "Kalshi API down")
 
         clear_cache()
@@ -132,6 +133,7 @@ class TestGetArbitrageData:
             "price_to_beat": None,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -154,6 +156,7 @@ class TestGetArbitrageData:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.30, "Down": 0.30},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -176,6 +179,7 @@ class TestGetArbitrageData:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.70, "Down": 0.70},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -197,6 +201,7 @@ class TestGetArbitrageData:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -219,6 +224,7 @@ class TestGetArbitrageData:
             "price_to_beat": 96000.0,
             "current_price": 96500.0,
             "prices": {"Up": 0.60, "Down": 0.35},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -254,6 +260,7 @@ class TestGetArbitrageData:
             "price_to_beat": 94000.0,
             "current_price": 94500.0,
             "prices": {"Up": 0.35, "Down": 0.60},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -285,6 +292,7 @@ class TestGetArbitrageData:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.45, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -313,6 +321,7 @@ class TestGetArbitrageData:
             "price_to_beat": 96000.0,
             "current_price": 96500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -342,6 +351,7 @@ class TestGetArbitrageData:
             "price_to_beat": 96000.0,
             "current_price": 96500.0,
             "prices": {"Up": 0.50, "Down": 0.50},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -369,6 +379,7 @@ class TestGetArbitrageData:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -393,6 +404,7 @@ class TestGetArbitrageData:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -430,6 +442,7 @@ class TestGetArbitrageData:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -456,6 +469,7 @@ class TestGetArbitrageData:
             "price_to_beat": 96000.0,
             "current_price": 96500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -506,6 +520,7 @@ class TestGetArbitrageData:
             "price_to_beat": 95000.0,
             "current_price": 95500.0,
             "prices": {"Up": 0.55, "Down": 0.47},
+            "depth": {"Up": 100.0, "Down": 200.0},
             "slug": "test",
             "target_time_utc": None,
         }, None)

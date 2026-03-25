@@ -54,12 +54,15 @@ async def check_arbitrage():
     poly_strike = poly_data["price_to_beat"]
     poly_up_cost = poly_data["prices"].get("Up", 0.0)
     poly_down_cost = poly_data["prices"].get("Down", 0.0)
+    poly_depth = poly_data.get("depth", {})
+    up_depth = poly_depth.get("Up", 0)
+    down_depth = poly_depth.get("Down", 0)
 
     if poly_strike is None:
         print("Polymarket Strike is None")
         return
 
-    print(f"POLYMARKET | Strike: ${poly_strike:,.2f} | Up: ${poly_up_cost:.3f} | Down: ${poly_down_cost:.3f}")
+    print(f"POLYMARKET | Strike: ${poly_strike:,.2f} | Up: ${poly_up_cost:.3f} ({up_depth:.0f} avail) | Down: ${poly_down_cost:.3f} ({down_depth:.0f} avail)")
 
     poly_sum = poly_up_cost + poly_down_cost
     if poly_sum > 0 and (poly_sum < PRICE_SUM_MIN or poly_sum > PRICE_SUM_MAX):

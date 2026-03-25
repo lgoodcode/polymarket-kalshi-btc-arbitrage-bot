@@ -10,16 +10,16 @@
 
 | # | Claim | Accuracy | Severity | Action | Status |
 |---|-------|----------|----------|--------|--------|
-| 1.1 | Fee model is wrong | Partially correct | Moderate | Fix now | [ ] TODO |
-| 1.2 | Kalshi legacy fields dead code | Correct | Low | Fix now | [ ] TODO |
-| 1.3 | Best ask ignores depth | Correct | Moderate | Fix now | [ ] TODO |
+| 1.1 | Fee model is wrong | Partially correct | Moderate | Fix now | [x] DONE |
+| 1.2 | Kalshi legacy fields dead code | Correct | Low | Fix now | [x] DONE |
+| 1.3 | Best ask ignores depth | Correct | Moderate | Fix now | [x] DONE |
 | 1.4 | Bot is read-only | Correct (by design) | N/A | No action | [x] N/A |
 | 1.5 | Polling too slow | Partially correct | Low | Defer | [x] N/A |
 | 1.6 | Float precision | Correct | Low (detection) | Defer | [x] N/A |
 | 2 | Fee formulas reference | Reference material | — | Use for 1.1 fix | [x] N/A |
 | 3 | Net profit formula | Reference material | — | Use for 1.1 fix | [x] N/A |
 | 4–6 | Execution (Poly/Kalshi/Cross) | Future feature | — | Defer | [x] N/A |
-| 7 | Order book depth | Partially actionable | Moderate | Fix now (detection side) | [ ] TODO |
+| 7 | Order book depth | Partially actionable | Moderate | Fix now (detection side) | [x] DONE |
 | 8 | WebSocket streaming | Future feature | — | Defer | [x] N/A |
 | 9 | Risk management | Future feature | — | Defer | [x] N/A |
 | 10 | Kelly criterion | Future feature | — | Defer | [x] N/A |

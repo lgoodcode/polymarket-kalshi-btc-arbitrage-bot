@@ -77,33 +77,6 @@ class TestFetchKalshiDataStruct:
     @patch('fetch_current_kalshi.get_kalshi_markets', new_callable=AsyncMock)
     @patch('fetch_current_kalshi.get_binance_current_price', new_callable=AsyncMock)
     @patch('fetch_current_kalshi.get_current_market_urls')
-    async def test_normal_flow_legacy_cents(self, mock_urls, mock_binance, mock_kalshi):
-        """Test parsing with legacy integer cent fields (pre-March 2026)."""
-        mock_urls.return_value = {
-            "kalshi": "https://kalshi.com/markets/kxbtcd/bitcoin-price-abovebelow/kxbtcd-25dec0114",
-            "polymarket": "...",
-            "target_time_utc": datetime.datetime(2025, 12, 1, 14, 0, 0, tzinfo=UTC),
-            "target_time_et": datetime.datetime(2025, 12, 1, 9, 0, 0),
-        }
-        mock_binance.return_value = (95500.0, None)
-        mock_kalshi.return_value = ([
-            {"subtitle": "$94,000 or above", "yes_bid": 85, "yes_ask": 87, "no_bid": 12, "no_ask": 14},
-            {"subtitle": "$96,000 or above", "yes_bid": 20, "yes_ask": 22, "no_bid": 77, "no_ask": 79},
-        ], None)
-
-        session = AsyncMock()
-        session.close = AsyncMock()
-        data, err = await fetch_kalshi_data_struct(session)
-        assert err is None
-        assert data["event_ticker"] == "KXBTCD-25DEC0114"
-        assert data["current_price"] == 95500.0
-        assert len(data["markets"]) == 2
-        assert data["markets"][0]["strike"] == 94000.0
-        assert data["markets"][1]["strike"] == 96000.0
-
-    @patch('fetch_current_kalshi.get_kalshi_markets', new_callable=AsyncMock)
-    @patch('fetch_current_kalshi.get_binance_current_price', new_callable=AsyncMock)
-    @patch('fetch_current_kalshi.get_current_market_urls')
     async def test_normal_flow_dollars_format(self, mock_urls, mock_binance, mock_kalshi):
         """Test parsing with _dollars string fields (post-March 2026)."""
         mock_urls.return_value = {
@@ -148,8 +121,8 @@ class TestFetchKalshiDataStruct:
         }
         mock_binance.return_value = (95500.0, None)
         mock_kalshi.return_value = ([
-            {"subtitle": "$94,000 or above", "yes_bid": 85, "yes_ask": 87, "no_bid": 12, "no_ask": 14},
-            {"subtitle": "invalid subtitle", "yes_bid": 50, "yes_ask": 52, "no_bid": 47, "no_ask": 49},
+            {"subtitle": "$94,000 or above", "yes_bid_dollars": "0.8500", "yes_ask_dollars": "0.8700", "no_bid_dollars": "0.1200", "no_ask_dollars": "0.1400"},
+            {"subtitle": "invalid subtitle", "yes_bid_dollars": "0.5000", "yes_ask_dollars": "0.5200", "no_bid_dollars": "0.4700", "no_ask_dollars": "0.4900"},
         ], None)
 
         session = AsyncMock()
@@ -212,7 +185,7 @@ class TestFetchKalshiDataStruct:
         }
         mock_binance.return_value = (None, "Binance Error")
         mock_kalshi.return_value = ([
-            {"subtitle": "$94,000 or above", "yes_bid": 85, "yes_ask": 87, "no_bid": 12, "no_ask": 14},
+            {"subtitle": "$94,000 or above", "yes_bid_dollars": "0.8500", "yes_ask_dollars": "0.8700", "no_bid_dollars": "0.1200", "no_ask_dollars": "0.1400"},
         ], None)
 
         session = AsyncMock()
@@ -234,8 +207,8 @@ class TestFetchKalshiDataStruct:
         }
         mock_binance.return_value = (95500.0, None)
         mock_kalshi.return_value = ([
-            {"subtitle": "$96,000 or above", "yes_bid": 20, "yes_ask": 22, "no_bid": 77, "no_ask": 79},
-            {"subtitle": "$94,000 or above", "yes_bid": 85, "yes_ask": 87, "no_bid": 12, "no_ask": 14},
+            {"subtitle": "$96,000 or above", "yes_bid_dollars": "0.2000", "yes_ask_dollars": "0.2200", "no_bid_dollars": "0.7700", "no_ask_dollars": "0.7900"},
+            {"subtitle": "$94,000 or above", "yes_bid_dollars": "0.8500", "yes_ask_dollars": "0.8700", "no_bid_dollars": "0.1200", "no_ask_dollars": "0.1400"},
         ], None)
 
         session = AsyncMock()
