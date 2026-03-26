@@ -73,6 +73,29 @@ class TestKalshiWebSocketConnect:
 
             assert success is True
             assert not client.authenticated
+            # But auth_requested should be set for reconnect
+            assert client._auth_requested is True
+
+            await client.disconnect()
+
+    async def test_auth_confirmed_only_on_login_response(self, mock_ws):
+        """_authenticated should only be True after server confirms login."""
+        with _patch_ws_connect() as mock_connect:
+            mock_connect.return_value = mock_ws
+
+            client = KalshiWebSocket()
+            # Even if _authenticate sends the message, _authenticated stays False
+            # until the login response handler sets it
+            await client.connect()
+            assert not client.authenticated
+
+            # Simulate server confirming login
+            await client._handle_message(json.dumps({"type": "login"}))
+            assert client.authenticated
+
+            # Simulate login error resets it
+            await client._handle_message(json.dumps({"type": "login", "error": "bad key"}))
+            assert not client.authenticated
 
             await client.disconnect()
 

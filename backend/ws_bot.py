@@ -125,10 +125,13 @@ async def fallback_poll_loop() -> None:
 
             session = await create_session()
             try:
-                binance_price = await get_binance_current_price(session)
+                binance_price, binance_err = await get_binance_current_price(session)
+                if binance_err:
+                    print(f"  Binance Error: {binance_err}")
+                    continue
                 (poly_data, poly_err), (kalshi_data, kalshi_err) = await asyncio.gather(
-                    fetch_polymarket_data_struct(session, binance_price=binance_price),
-                    fetch_kalshi_data_struct(session, binance_price=binance_price),
+                    fetch_polymarket_data_struct(session, binance_price=(binance_price, binance_err)),
+                    fetch_kalshi_data_struct(session, binance_price=(binance_price, binance_err)),
                 )
             finally:
                 await session.close()
@@ -242,19 +245,29 @@ async def run_ws_bot() -> None:
     print("=" * 50)
 
     # Step 3: Run until interrupted
+    # Grace period: don't exit during transient reconnects — wait up to 30s
+    both_disconnected_seconds = 0
+    max_disconnect_grace = 30
     try:
         while manager.running:
             await asyncio.sleep(1)
-            # Periodic status logging
             s = manager.get_status()
             if not s["polymarket_connected"] and not s["kalshi_connected"]:
-                logger.error("Both WebSocket connections lost")
-                break
+                both_disconnected_seconds += 1
+                if both_disconnected_seconds >= max_disconnect_grace:
+                    logger.error("Both WebSocket connections lost for %ds, giving up", max_disconnect_grace)
+                    break
+            else:
+                both_disconnected_seconds = 0
     except asyncio.CancelledError:
         pass
     finally:
         await manager.stop()
         print(f"\nStopped. Total scans: {manager.get_status()['scan_count']}")
+
+    # Fall back to HTTP polling if configured
+    if WS_FALLBACK_TO_HTTP and both_disconnected_seconds >= max_disconnect_grace:
+        await fallback_poll_loop()
 
 
 def main():

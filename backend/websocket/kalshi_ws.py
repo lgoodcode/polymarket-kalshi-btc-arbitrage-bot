@@ -43,6 +43,7 @@ class KalshiWebSocket:
         self._ws = None
         self._running = False
         self._authenticated = False
+        self._auth_requested = False  # Persists across reconnects
         self._listen_task = None
         self._heartbeat_task = None
         self._msg_id = 0
@@ -65,19 +66,23 @@ class KalshiWebSocket:
         Returns (success, error) tuple.
         """
         try:
+            # Cancel any existing tasks before creating new ones
+            await self._cancel_tasks()
+
             self._ws = await websockets.connect(WS_KALSHI_URL)
             self._running = True
+            self._authenticated = False
             self._last_message_time = time.time()
             logger.info("Kalshi WS connected")
 
             # Authenticate if requested and credentials are available
             if authenticated:
+                self._auth_requested = True
                 auth_ok, auth_err = await self._authenticate()
                 if not auth_ok:
                     logger.warning("Kalshi WS auth failed: %s (continuing unauthenticated)", auth_err)
-                else:
-                    self._authenticated = True
-                    logger.info("Kalshi WS authenticated")
+                # Note: _authenticated is set to True only when the server
+                # confirms login via the "login" message handler
 
             # Start background tasks
             self._listen_task = asyncio.ensure_future(self._listen())
@@ -235,6 +240,9 @@ class KalshiWebSocket:
             if msg.get("error"):
                 logger.error("Kalshi WS login error: %s", msg.get("error"))
                 self._authenticated = False
+            else:
+                self._authenticated = True
+                logger.info("Kalshi WS login confirmed by server")
 
     async def _handle_ticker(self, msg: dict) -> None:
         """Process a ticker update message and update market state."""
@@ -263,9 +271,11 @@ class KalshiWebSocket:
             await self._on_fill(msg)
 
     def get_current_state(self) -> tuple[dict | None, str | None]:
-        """Return current market state matching fetch_kalshi_data_struct format.
+        """Return the current WebSocket-derived market state.
 
-        Returns (data_dict, error) tuple.
+        Returns a (data_dict, error) tuple where data_dict has keys:
+        - "event_ticker": subscribed event ticker, or "" if not set
+        - "markets": list of market dicts from MarketState.get_markets()
         """
         markets = self._market_state.get_markets()
         if not markets:
@@ -293,8 +303,25 @@ class KalshiWebSocket:
         except asyncio.CancelledError:
             pass
 
+    async def _cancel_tasks(self) -> None:
+        """Cancel any running listen/heartbeat tasks."""
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+        if self._listen_task and not self._listen_task.done():
+            self._listen_task.cancel()
+            try:
+                await self._listen_task
+            except asyncio.CancelledError:
+                pass
+
     async def _reconnect(self) -> None:
         """Reconnect with exponential backoff, resubscribing to previous channels."""
+        await self._cancel_tasks()
+
         if self._ws:
             try:
                 await self._ws.close()
@@ -309,12 +336,12 @@ class KalshiWebSocket:
             logger.info("Kalshi WS reconnect attempt %d/%d (delay %.1fs)",
                         attempt, WS_RECONNECT_MAX_RETRIES, delay)
             await asyncio.sleep(delay)
-            success, err = await self.connect(authenticated=self._authenticated)
+            success, err = await self.connect(authenticated=self._auth_requested)
             if success:
                 # Resubscribe to previously subscribed tickers
                 if self._subscribed_tickers:
                     await self.subscribe_market(self._subscribed_tickers)
-                if self._authenticated:
+                if self._auth_requested:
                     await self.subscribe_fills()
                 logger.info("Kalshi WS reconnected on attempt %d", attempt)
                 return

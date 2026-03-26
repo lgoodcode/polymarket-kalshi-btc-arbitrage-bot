@@ -1,7 +1,7 @@
 """Polymarket WebSocket client for real-time order book updates.
 
 Connects to the Polymarket CLOB WebSocket and maintains local order book
-state for Up/Down tokens. Fires a callback when prices change.
+state for Up/Down tokens. Fires a callback on every book update.
 """
 import asyncio
 import json
@@ -27,7 +27,7 @@ class PolymarketWebSocket:
     """Real-time order book client for Polymarket CLOB.
 
     Subscribes to order book channels for given token IDs and maintains
-    local OrderBook instances. Calls on_update callback when prices change.
+    local OrderBook instances. Calls on_update callback on every book update.
 
     Args:
         token_ids: Dict mapping outcome name to token ID, e.g. {"Up": "abc", "Down": "def"}.
@@ -54,6 +54,9 @@ class PolymarketWebSocket:
         Returns (success, error) tuple.
         """
         try:
+            # Cancel any existing tasks before creating new ones
+            await self._cancel_tasks()
+
             self._ws = await websockets.connect(WS_POLYMARKET_URL)
             self._running = True
             self._last_message_time = time.time()
@@ -171,9 +174,11 @@ class PolymarketWebSocket:
         return prices, depth
 
     def get_current_state(self) -> tuple[dict | None, str | None]:
-        """Return current prices in the same format as fetch_polymarket_data_struct.
+        """Return current prices and depth from the local order books.
 
-        Returns (data_dict, error) tuple.
+        Returns (data_dict, error) tuple, where data_dict has keys:
+        - "prices": {outcome: best_ask_price, ...}
+        - "depth": {outcome: best_ask_size, ...}
         """
         prices, depth = self._get_prices_and_depth()
 
@@ -197,8 +202,25 @@ class PolymarketWebSocket:
         except asyncio.CancelledError:
             pass
 
+    async def _cancel_tasks(self) -> None:
+        """Cancel any running listen/heartbeat tasks."""
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+        if self._listen_task and not self._listen_task.done():
+            self._listen_task.cancel()
+            try:
+                await self._listen_task
+            except asyncio.CancelledError:
+                pass
+
     async def _reconnect(self) -> None:
         """Reconnect with exponential backoff."""
+        await self._cancel_tasks()
+
         if self._ws:
             try:
                 await self._ws.close()

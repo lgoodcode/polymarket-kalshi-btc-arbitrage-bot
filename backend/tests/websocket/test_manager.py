@@ -112,6 +112,34 @@ class TestWebSocketManagerStart:
 
         await manager.stop()
 
+    @patch("websocket.manager.KalshiWebSocket")
+    @patch("websocket.manager.PolymarketWebSocket")
+    async def test_start_fails_when_subscription_fails(self, MockPoly, MockKalshi,
+                                                        poly_token_ids, kalshi_tickers, poly_strike):
+        """If Kalshi connects but subscribe_market fails, and Poly also fails, start should fail."""
+        mock_poly = MockPoly.return_value
+        mock_poly.connect = AsyncMock(return_value=(False, "poly down"))
+        mock_poly.disconnect = AsyncMock()
+
+        mock_kalshi = MockKalshi.return_value
+        mock_kalshi.connect = AsyncMock(return_value=(True, None))
+        mock_kalshi.subscribe_market = AsyncMock(return_value=(False, "subscribe failed"))
+        mock_kalshi.disconnect = AsyncMock()
+        mock_kalshi.authenticated = False
+
+        manager = WebSocketManager(
+            poly_token_ids=poly_token_ids,
+            kalshi_market_tickers=kalshi_tickers,
+            poly_strike=poly_strike,
+        )
+        manager._poly_ws = mock_poly
+        manager._kalshi_ws = mock_kalshi
+
+        success, err = await manager.start()
+        # Both sides unusable (poly failed, kalshi subscribe failed)
+        assert success is False
+        assert "subscribe failed" in err
+
 
 class TestWebSocketManagerScans:
     """Tests for arbitrage scan triggering."""
@@ -213,6 +241,41 @@ class TestWebSocketManagerScans:
         )
         # Prices that don't sum to ~1.0
         manager._poly_prices = {"Up": Decimal("0.10"), "Down": Decimal("0.10")}
+        manager._kalshi_markets = [
+            {"strike": Decimal("95000"), "yes_ask": Decimal("0.50"), "no_ask": Decimal("0.52")},
+        ]
+
+        await manager._run_arbitrage_scan()
+        opportunity_callback.assert_not_called()
+
+    async def test_scan_skipped_missing_poly_leg(self, poly_token_ids, kalshi_tickers, poly_strike):
+        """A missing Poly leg (price=0) should not be treated as free."""
+        opportunity_callback = AsyncMock()
+        manager = WebSocketManager(
+            poly_token_ids=poly_token_ids,
+            kalshi_market_tickers=kalshi_tickers,
+            poly_strike=poly_strike,
+            on_opportunity=opportunity_callback,
+        )
+        # Up has price but Down is zero (no liquidity)
+        manager._poly_prices = {"Up": Decimal("0.55"), "Down": Decimal("0")}
+        manager._kalshi_markets = [
+            {"strike": Decimal("95000"), "yes_ask": Decimal("0.50"), "no_ask": Decimal("0.52")},
+        ]
+
+        await manager._run_arbitrage_scan()
+        opportunity_callback.assert_not_called()
+
+    async def test_scan_skipped_both_poly_legs_zero(self, poly_token_ids, kalshi_tickers, poly_strike):
+        """Both Poly legs at zero should skip scan."""
+        opportunity_callback = AsyncMock()
+        manager = WebSocketManager(
+            poly_token_ids=poly_token_ids,
+            kalshi_market_tickers=kalshi_tickers,
+            poly_strike=poly_strike,
+            on_opportunity=opportunity_callback,
+        )
+        manager._poly_prices = {"Up": Decimal("0"), "Down": Decimal("0")}
         manager._kalshi_markets = [
             {"strike": Decimal("95000"), "yes_ask": Decimal("0.50"), "no_ask": Decimal("0.52")},
         ]

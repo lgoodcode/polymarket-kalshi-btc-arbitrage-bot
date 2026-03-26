@@ -1,7 +1,7 @@
 """WebSocket connection manager — orchestrates both WS clients.
 
-Coordinates Polymarket and Kalshi WebSocket connections, triggers arbitrage
-scans when either side updates, and falls back to HTTP polling on failure.
+Coordinates Polymarket and Kalshi WebSocket connections and triggers arbitrage
+scans when either side updates.
 """
 import asyncio
 import logging
@@ -11,7 +11,6 @@ from decimal import Decimal
 from arbitrage import run_arbitrage_checks
 from config import (
     WS_SCAN_INTERVAL,
-    WS_FALLBACK_TO_HTTP,
     PRICE_SUM_MIN,
     PRICE_SUM_MAX,
 )
@@ -73,7 +72,6 @@ class WebSocketManager:
         self._kalshi_market_tickers = kalshi_market_tickers
 
         self._running = False
-        self._fallback_task = None
 
     async def start(self) -> tuple[bool, str | None]:
         """Start both WebSocket connections.
@@ -102,9 +100,10 @@ class WebSocketManager:
 
         # Subscribe Kalshi to market tickers
         if kalshi_ok and self._kalshi_market_tickers:
-            sub_ok, sub_err = await self._kalshi_ws.subscribe_market(self._kalshi_market_tickers)
+            _sub_ok, sub_err = await self._kalshi_ws.subscribe_market(self._kalshi_market_tickers)
             if sub_err:
                 errors.append(f"Kalshi subscribe: {sub_err}")
+                kalshi_ok = False  # Subscription failure makes feed unusable
 
             # Subscribe to fills if authenticated
             if self._authenticated and self._kalshi_ws.authenticated:
@@ -120,15 +119,8 @@ class WebSocketManager:
         return True, None
 
     async def stop(self) -> None:
-        """Stop both WebSocket connections and any fallback tasks."""
+        """Stop both WebSocket connections."""
         self._running = False
-        if self._fallback_task and not self._fallback_task.done():
-            self._fallback_task.cancel()
-            try:
-                await self._fallback_task
-            except asyncio.CancelledError:
-                pass
-
         await asyncio.gather(
             self._poly_ws.disconnect(),
             self._kalshi_ws.disconnect(),
@@ -162,6 +154,10 @@ class WebSocketManager:
 
         poly_up = self._poly_prices.get("Up", ZERO)
         poly_down = self._poly_prices.get("Down", ZERO)
+
+        # Both legs must have a live ask — a missing leg would be treated as free
+        if poly_up <= ZERO or poly_down <= ZERO:
+            return
 
         # Sanity check
         poly_sum = poly_up + poly_down
