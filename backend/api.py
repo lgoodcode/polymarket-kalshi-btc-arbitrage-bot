@@ -221,7 +221,6 @@ async def execute_arbitrage(body: dict):
     )
 
     if not EXECUTION_ENABLED:
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=403,
             content={"error": "Execution is disabled. Set EXECUTION_ENABLED=true to enable."},
@@ -230,7 +229,6 @@ async def execute_arbitrage(body: dict):
     # Validate required fields
     for field in ("poly_token_id", "kalshi_ticker", "opportunity"):
         if field not in body:
-            from fastapi.responses import JSONResponse
             return JSONResponse(
                 status_code=400,
                 content={"error": f"Missing required field: {field}"},
@@ -239,6 +237,28 @@ async def execute_arbitrage(body: dict):
     opportunity = body["opportunity"]
     size = body.get("size", DEFAULT_ORDER_SIZE)
     strategy = body.get("strategy", "maker_first")
+
+    # Validate size
+    try:
+        size = int(size)
+    except (TypeError, ValueError):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid 'size': must be a positive integer."},
+        )
+    if size <= 0:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid 'size': must be a positive integer."},
+        )
+
+    # Validate strategy
+    allowed_strategies = {"maker_first", "parallel"}
+    if strategy not in allowed_strategies:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Invalid 'strategy': must be one of {', '.join(sorted(allowed_strategies))}"},
+        )
 
     # Initialize clients
     from execution.kalshi_client import KalshiClient
@@ -252,7 +272,6 @@ async def execute_arbitrage(body: dict):
     )
     ok, err = kalshi_client.initialize()
     if not ok:
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=500,
             content={"error": f"Kalshi client init failed: {err}"},
@@ -265,7 +284,6 @@ async def execute_arbitrage(body: dict):
     )
     ok, err = poly_client.initialize()
     if not ok:
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=500,
             content={"error": f"Polymarket client init failed: {err}"},
@@ -286,28 +304,8 @@ async def execute_arbitrage(body: dict):
     finally:
         await session.close()
 
-    # Convert Decimal values for JSON serialization
-    def _serialize(obj):
-        if hasattr(obj, '__dataclass_fields__'):
-            from dataclasses import asdict
-            return asdict(obj)
-        return obj
-
     from dataclasses import asdict
-    result_dict = asdict(result)
-
-    # Convert Decimal to float for JSON
-    def _decimal_to_float(d):
-        if isinstance(d, dict):
-            return {k: _decimal_to_float(v) for k, v in d.items()}
-        if isinstance(d, list):
-            return [_decimal_to_float(v) for v in d]
-        if isinstance(d, Decimal):
-            return float(d)
-        return d
-
-    from decimal import Decimal
-    return _decimal_to_float(result_dict)
+    return decimal_to_json(asdict(result))
 
 
 if __name__ == "__main__":

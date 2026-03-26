@@ -139,3 +139,94 @@ class TestExecuteEndpoint:
 
         assert resp.status_code == 500
         assert "Kalshi client init failed" in resp.json()["error"]
+
+
+@pytest.mark.execution
+class TestExecuteInputValidation:
+    """Tests for /execute input validation (C7, T6)."""
+
+    @pytest.mark.asyncio
+    @patch("config.EXECUTION_ENABLED", True)
+    async def test_invalid_strategy_returns_400(self, client):
+        resp = await client.post("/execute", json={
+            "poly_token_id": "tok1",
+            "kalshi_ticker": "KXBTCD",
+            "opportunity": {"poly_leg": "Down", "kalshi_leg": "Yes",
+                           "poly_cost": 0.35, "kalshi_cost": 0.42,
+                           "margin": 0.23, "estimated_fees": 0.02},
+            "strategy": "invalid_strategy",
+        })
+        assert resp.status_code == 400
+        assert "strategy" in resp.json()["error"].lower()
+
+    @pytest.mark.asyncio
+    @patch("config.EXECUTION_ENABLED", True)
+    async def test_negative_size_returns_400(self, client):
+        resp = await client.post("/execute", json={
+            "poly_token_id": "tok1",
+            "kalshi_ticker": "KXBTCD",
+            "opportunity": {"poly_leg": "Down", "kalshi_leg": "Yes",
+                           "poly_cost": 0.35, "kalshi_cost": 0.42,
+                           "margin": 0.23, "estimated_fees": 0.02},
+            "size": -5,
+        })
+        assert resp.status_code == 400
+        assert "size" in resp.json()["error"].lower()
+
+    @pytest.mark.asyncio
+    @patch("config.EXECUTION_ENABLED", True)
+    async def test_zero_size_returns_400(self, client):
+        resp = await client.post("/execute", json={
+            "poly_token_id": "tok1",
+            "kalshi_ticker": "KXBTCD",
+            "opportunity": {"poly_leg": "Down", "kalshi_leg": "Yes",
+                           "poly_cost": 0.35, "kalshi_cost": 0.42,
+                           "margin": 0.23, "estimated_fees": 0.02},
+            "size": 0,
+        })
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    @patch("config.EXECUTION_ENABLED", True)
+    async def test_string_size_returns_400(self, client):
+        resp = await client.post("/execute", json={
+            "poly_token_id": "tok1",
+            "kalshi_ticker": "KXBTCD",
+            "opportunity": {"poly_leg": "Down", "kalshi_leg": "Yes",
+                           "poly_cost": 0.35, "kalshi_cost": 0.42,
+                           "margin": 0.23, "estimated_fees": 0.02},
+            "size": "abc",
+        })
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    @patch("config.EXECUTION_ENABLED", True)
+    @patch("config.KALSHI_API_KEY_ID", "test-key")
+    @patch("config.KALSHI_PRIVATE_KEY_PATH", "")
+    @patch("config.POLYMARKET_HOST", "https://clob.polymarket.com")
+    @patch("config.POLYMARKET_PRIVATE_KEY", "0xdeadbeef")
+    @patch("config.POLYMARKET_CHAIN_ID", 137)
+    @patch("config.DEFAULT_ORDER_SIZE", 10)
+    async def test_polymarket_init_failure(self, client):
+        """Test failure when Polymarket client can't initialize (T6)."""
+        with patch("execution.kalshi_client.KalshiClient") as MockKalshi, \
+             patch("execution.polymarket_client.PolymarketClient") as MockPoly:
+
+            mock_kalshi = MagicMock()
+            mock_kalshi.initialize.return_value = (True, None)
+            MockKalshi.return_value = mock_kalshi
+
+            mock_poly = MagicMock()
+            mock_poly.initialize.return_value = (False, "Bad private key")
+            MockPoly.return_value = mock_poly
+
+            resp = await client.post("/execute", json={
+                "poly_token_id": "tok1",
+                "kalshi_ticker": "KXBTCD",
+                "opportunity": {"poly_leg": "Down", "kalshi_leg": "Yes",
+                               "poly_cost": 0.35, "kalshi_cost": 0.42,
+                               "margin": 0.23, "estimated_fees": 0.02},
+            })
+
+        assert resp.status_code == 500
+        assert "Polymarket client init failed" in resp.json()["error"]

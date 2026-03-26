@@ -234,7 +234,7 @@ class TestMakerFirstExecution:
 
     @pytest.mark.asyncio
     async def test_kalshi_fails_triggers_rollback(self, engine, mock_session, sample_plan, mock_poly_client, mock_kalshi_client):
-        """Polymarket fills but Kalshi rejects — rollback attempted."""
+        """Polymarket fills but Kalshi rejects — rollback reports unhedged exposure."""
         mock_poly_client.place_order.return_value = (
             OrderResult("p1", "open", filled_size=0), None
         )
@@ -251,7 +251,8 @@ class TestMakerFirstExecution:
 
         assert result.status == "partial_fill"
         assert "Kalshi leg failed" in result.error
-        mock_poly_client.cancel_order.assert_called_once()
+        # Rollback skips cancel for filled orders — reports unhedged exposure
+        assert "unhedged" in result.error.lower() or "Rollback" in result.error
 
 
 @pytest.mark.execution
@@ -344,3 +345,103 @@ class TestCalculatePnl:
         # fees = 0 + 0.02 = 0.02
         # pnl = 10.00 - 7.70 - 0.02 = 2.28
         assert pnl == Decimal("2.28")
+
+    def test_pnl_with_none_prices(self, engine):
+        """filled_price=None defaults to 0 cost (T5)."""
+        poly = OrderResult("p1", "filled", None, 10, Decimal("0"))
+        kalshi = OrderResult("k1", "filled", None, 10, Decimal("0"))
+        pnl = engine._calculate_pnl(poly, kalshi)
+        assert pnl == Decimal("10.00")
+
+    def test_pnl_mismatched_sizes(self, engine):
+        """Payout uses min of the two fill sizes (T5)."""
+        poly = OrderResult("p1", "filled", Decimal("0.35"), 10, Decimal("0"))
+        kalshi = OrderResult("k1", "filled", Decimal("0.42"), 5, Decimal("0"))
+        pnl = engine._calculate_pnl(poly, kalshi)
+        # payout = 1.00 * min(10, 5) = 5.00
+        # cost = (0.35 * 10) + (0.42 * 5) = 3.50 + 2.10 = 5.60
+        assert pnl == Decimal("5.00") - Decimal("3.50") - Decimal("2.10")
+
+
+@pytest.mark.execution
+class TestStrategyValidation:
+    """Tests for strategy validation (T3, C6)."""
+
+    def test_invalid_strategy_raises(self, engine, sample_opportunity):
+        with pytest.raises(ValueError, match="Invalid strategy"):
+            engine.build_execution_plan(
+                sample_opportunity,
+                poly_token_id="tok1",
+                kalshi_ticker="KXBTCD",
+                strategy="invalid_strategy",
+            )
+
+    def test_maker_first_valid(self, engine, sample_opportunity):
+        plan = engine.build_execution_plan(
+            sample_opportunity, poly_token_id="tok1", kalshi_ticker="KXBTCD",
+            strategy="maker_first",
+        )
+        assert plan.strategy == "maker_first"
+
+    def test_parallel_valid(self, engine, sample_opportunity):
+        plan = engine.build_execution_plan(
+            sample_opportunity, poly_token_id="tok1", kalshi_ticker="KXBTCD",
+            strategy="parallel",
+        )
+        assert plan.strategy == "parallel"
+
+
+@pytest.mark.execution
+class TestWaitForFillEdgeCases:
+    """Tests for _wait_for_fill edge cases (T4)."""
+
+    @pytest.mark.asyncio
+    async def test_canceled_status_returns_false(self, engine, mock_poly_client):
+        mock_poly_client.get_order.return_value = ({"status": "CANCELED"}, None)
+        filled, data = await engine._wait_for_fill("ord-123", timeout=1, poll_interval=0.1)
+        assert filled is False
+        assert data is None
+
+    @pytest.mark.asyncio
+    async def test_matched_returns_fill_data(self, engine, mock_poly_client):
+        fill_response = {"status": "MATCHED", "avg_price": "0.35", "size_matched": 10}
+        mock_poly_client.get_order.return_value = (fill_response, None)
+        filled, data = await engine._wait_for_fill("ord-123", timeout=1, poll_interval=0.1)
+        assert filled is True
+        assert data == fill_response
+
+    @pytest.mark.asyncio
+    async def test_error_response_retries(self, engine, mock_poly_client):
+        """get_order error should retry, then timeout."""
+        mock_poly_client.get_order.return_value = (None, "Connection error")
+        filled, data = await engine._wait_for_fill("ord-123", timeout=0.3, poll_interval=0.1)
+        assert filled is False
+
+    @pytest.mark.asyncio
+    async def test_non_dict_response(self, engine, mock_poly_client):
+        """Non-dict response should be treated as unknown status."""
+        mock_poly_client.get_order.return_value = ("not-a-dict", None)
+        filled, data = await engine._wait_for_fill("ord-123", timeout=0.3, poll_interval=0.1)
+        assert filled is False
+
+
+@pytest.mark.execution
+class TestTimeoutCancelHandling:
+    """Tests for timeout cancel result handling (C4)."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_failure_on_timeout(self, engine, mock_session, sample_plan, mock_poly_client):
+        """When cancel fails after timeout, error reflects the failure."""
+        mock_poly_client.place_order.return_value = (
+            OrderResult("p1", "open", filled_size=0), None
+        )
+        mock_poly_client.get_order.return_value = ({"status": "LIVE"}, None)
+        mock_poly_client.cancel_order.return_value = (False, "Already filled")
+
+        with patch("config.MIN_MARGIN_AFTER_FEES", Decimal("0.001")):
+            with patch("config.POLY_FILL_TIMEOUT", 0.3):
+                with patch("config.POLY_FILL_POLL_INTERVAL", 0.1):
+                    result = await engine.execute(mock_session, sample_plan)
+
+        assert result.status == "failed"
+        assert "cancel failed" in result.error

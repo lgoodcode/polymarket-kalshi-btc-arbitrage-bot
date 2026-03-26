@@ -5,7 +5,7 @@ and balance queries against both demo and production endpoints.
 """
 import json
 import logging
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional
 
 import aiohttp
@@ -112,7 +112,7 @@ class KalshiClient:
         try:
             balance = Decimal(str(data.get("balance", 0))) / Decimal("100")  # cents to dollars
             return balance, None
-        except (KeyError, ValueError) as e:
+        except (KeyError, ValueError, TypeError, InvalidOperation) as e:
             return None, f"Failed to parse balance: {e}"
 
     async def place_order(self, session: aiohttp.ClientSession, request: OrderRequest) -> tuple:
@@ -120,20 +120,20 @@ class KalshiClient:
 
         Returns (OrderResult, error) tuple.
         """
-        side_map = {"buy": "yes", "sell": "no"}
         body = {
-            "action": "buy",
+            "action": request.side,
             "ticker": request.ticker,
             "type": "limit",
             "side": request.outcome.lower(),
             "count": request.size,
         }
 
-        # Set price based on outcome
+        # Set price based on outcome — quantize to nearest cent before converting
+        price_cents = int((request.price * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
         if request.outcome.lower() == "yes":
-            body["yes_price"] = int(request.price * 100)  # dollars to cents
+            body["yes_price"] = price_cents
         else:
-            body["no_price"] = int(request.price * 100)
+            body["no_price"] = price_cents
 
         # Set time_in_force for IOC orders
         if request.order_type == "ioc":
@@ -161,6 +161,8 @@ class KalshiClient:
                 "canceled": "cancelled",
                 "executed": "filled",
                 "pending": "open",
+                "partially_executed": "partial",
+                "expired": "cancelled",
             }
             mapped_status = status_map.get(status, status)
 

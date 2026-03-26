@@ -306,3 +306,69 @@ class TestUninitializedClient:
         balance, err = await client.get_balance(mock_session)
         assert balance is None
         assert "not initialized" in err
+
+
+@pytest.mark.execution
+class TestAuthenticatedRequestErrorPaths:
+    """Tests for _authenticated_request error handling (T2)."""
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_429(self, kalshi_client):
+        mock_session = MagicMock()
+        mock_session.request = MagicMock(return_value=MockResponse({}, status=429))
+
+        data, err = await kalshi_client.get_balance(mock_session)
+        assert data is None
+        assert "Rate limited" in err
+
+    @pytest.mark.asyncio
+    async def test_server_error_500(self, kalshi_client):
+        mock_session = MagicMock()
+        mock_session.request = MagicMock(
+            return_value=MockResponse({"message": "Internal Server Error"}, status=500)
+        )
+
+        data, err = await kalshi_client.get_balance(mock_session)
+        assert data is None
+        assert "500" in err
+
+    @pytest.mark.asyncio
+    async def test_action_field_uses_request_side(self, kalshi_client):
+        """Verify action field maps from request.side (C1 fix)."""
+        order_response = {"order": {"order_id": "ord-sell", "status": "resting", "filled_count": 0}}
+        mock_session = MagicMock()
+        mock_session.request = MagicMock(return_value=MockResponse(order_response))
+
+        req = OrderRequest("kalshi", "KXBTCD", "sell", "no", Decimal("0.42"), 10, "gtc")
+        await kalshi_client.place_order(mock_session, req)
+
+        call_args = mock_session.request.call_args
+        body = json.loads(call_args[1]["data"])
+        assert body["action"] == "sell"
+
+    @pytest.mark.asyncio
+    async def test_price_rounding_not_truncation(self, kalshi_client):
+        """Verify price is rounded, not truncated (C2 fix)."""
+        order_response = {"order": {"order_id": "ord-round", "status": "resting", "filled_count": 0}}
+        mock_session = MagicMock()
+        mock_session.request = MagicMock(return_value=MockResponse(order_response))
+
+        # 0.425 * 100 = 42.5 → should round to 43, not truncate to 42
+        req = OrderRequest("kalshi", "KXBTCD", "buy", "yes", Decimal("0.425"), 10, "gtc")
+        await kalshi_client.place_order(mock_session, req)
+
+        call_args = mock_session.request.call_args
+        body = json.loads(call_args[1]["data"])
+        assert body["yes_price"] == 43  # rounded up, not 42
+
+    @pytest.mark.asyncio
+    async def test_balance_invalid_type(self, kalshi_client):
+        """Verify get_balance handles non-numeric balance (C3 fix)."""
+        mock_session = MagicMock()
+        mock_session.request = MagicMock(
+            return_value=MockResponse({"balance": "not-a-number"})
+        )
+
+        balance, err = await kalshi_client.get_balance(mock_session)
+        assert balance is None
+        assert "Failed to parse balance" in err

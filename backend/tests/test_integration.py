@@ -60,9 +60,9 @@ def _make_kalshi_data(markets, ticker="KXBTCD-26MAR2311", current=Decimal("95500
 def _make_kalshi_market(strike, yes_ask, no_ask, yes_bid=None, no_bid=None):
     return {
         "strike": Decimal(str(strike)),
-        "yes_bid": Decimal(str(yes_bid)) if yes_bid else Decimal(str(1.0 - no_ask)),
+        "yes_bid": Decimal(str(yes_bid)) if yes_bid else Decimal("1") - Decimal(str(no_ask)),
         "yes_ask": Decimal(str(yes_ask)),
-        "no_bid": Decimal(str(no_bid)) if no_bid else Decimal(str(1.0 - yes_ask)),
+        "no_bid": Decimal(str(no_bid)) if no_bid else Decimal("1") - Decimal(str(yes_ask)),
         "no_ask": Decimal(str(no_ask)),
         "subtitle": f"${int(strike):,} or above",
     }

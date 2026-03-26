@@ -128,11 +128,23 @@ class PolymarketClient:
                 ), None
 
             order_id = response.get("orderID", "")
+
+            # Parse actual fill data from response when available
+            if request.order_type == "fok":
+                filled_size = int(response.get("filledSize", request.size))
+                avg_price = response.get("averagePrice")
+                filled_price = Decimal(str(avg_price)) if avg_price is not None else request.price
+                status = "filled"
+            else:
+                filled_size = 0
+                filled_price = None
+                status = "open"
+
             return OrderResult(
                 order_id=order_id,
-                status="open" if request.order_type == "gtc" else "filled",
-                filled_size=request.size if request.order_type == "fok" else 0,
-                filled_price=request.price if request.order_type == "fok" else None,
+                status=status,
+                filled_size=filled_size,
+                filled_price=filled_price,
                 raw_response=response,
             ), None
 

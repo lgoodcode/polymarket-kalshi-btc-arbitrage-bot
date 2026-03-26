@@ -19,6 +19,8 @@ from execution.models import (
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_STRATEGIES = {"maker_first", "parallel"}
+
 
 class ExecutionEngine:
     """Cross-platform arbitrage execution orchestrator."""
@@ -41,6 +43,11 @@ class ExecutionEngine:
         The opportunity dict has keys: poly_leg, kalshi_leg, poly_cost, kalshi_cost,
         margin, estimated_fees, etc.
         """
+        if strategy not in ALLOWED_STRATEGIES:
+            raise ValueError(
+                f"Invalid strategy '{strategy}'. Must be one of: {', '.join(sorted(ALLOWED_STRATEGIES))}"
+            )
+
         poly_leg = opportunity["poly_leg"]     # "Up" or "Down"
         kalshi_leg = opportunity["kalshi_leg"]  # "Yes" or "No"
         poly_cost = Decimal(str(opportunity["poly_cost"]))
@@ -157,21 +164,38 @@ class ExecutionEngine:
         logger.info("Polymarket GTC order placed: %s", poly_result.order_id)
 
         # Step 2: Poll for fill
-        filled = await self._wait_for_fill(poly_result.order_id, POLY_FILL_TIMEOUT, POLY_FILL_POLL_INTERVAL)
+        filled, fill_data = await self._wait_for_fill(
+            poly_result.order_id, POLY_FILL_TIMEOUT, POLY_FILL_POLL_INTERVAL
+        )
         if not filled:
-            # Timeout — cancel the Polymarket order
+            # Timeout — attempt to cancel the Polymarket order
             logger.warning("Polymarket order timed out, cancelling: %s", poly_result.order_id)
-            await self.poly_client.cancel_order(poly_result.order_id)
+            cancel_ok, cancel_err = await self.poly_client.cancel_order(poly_result.order_id)
+            if not cancel_ok:
+                logger.error(
+                    "Failed to cancel timed-out Polymarket order %s: %s",
+                    poly_result.order_id, cancel_err,
+                )
+                return ExecutionResult(
+                    status="failed",
+                    poly_result=poly_result,
+                    error=f"Polymarket GTC order timed out and cancel failed: {cancel_err}",
+                )
             poly_result.status = "cancelled"
             return ExecutionResult(
                 status="failed",
                 poly_result=poly_result,
-                error="Polymarket GTC order timed out",
+                error="Polymarket GTC order timed out and was cancelled",
             )
 
+        # Update poly_result with actual fill data from polling
         poly_result.status = "filled"
         poly_result.filled_size = plan.poly_order.size
-        poly_result.filled_price = plan.poly_order.price
+        if fill_data and isinstance(fill_data, dict):
+            poly_result.filled_price = Decimal(str(fill_data["avg_price"])) if "avg_price" in fill_data else plan.poly_order.price
+            poly_result.filled_size = fill_data.get("size_matched", plan.poly_order.size)
+        else:
+            poly_result.filled_price = plan.poly_order.price
         logger.info("Polymarket order filled: %s", poly_result.order_id)
 
         # Step 3: Place Kalshi IOC order
@@ -231,12 +255,17 @@ class ExecutionEngine:
             )
 
         if not poly_ok and kalshi_ok:
-            # Rare: Kalshi filled but Poly didn't. Log the exposure.
+            # Rare: Kalshi filled but Poly didn't. Attempt Kalshi cancel.
+            logger.error("Polymarket FOK failed but Kalshi filled — attempting Kalshi cancel")
+            cancel_ok, cancel_err = await self.kalshi_client.cancel_order(
+                session, kalshi_result.order_id
+            )
+            cancel_msg = "cancel attempted" if cancel_ok else f"cancel failed: {cancel_err}"
             return ExecutionResult(
                 status="partial_fill",
                 poly_result=poly_result,
                 kalshi_result=kalshi_result,
-                error="Polymarket FOK failed but Kalshi filled — unhedged Kalshi position",
+                error=f"Polymarket FOK failed but Kalshi filled — unhedged position ({cancel_msg})",
             )
 
         # Neither filled
@@ -247,8 +276,11 @@ class ExecutionEngine:
             error="Neither leg filled",
         )
 
-    async def _wait_for_fill(self, order_id: str, timeout: int, poll_interval: float) -> bool:
-        """Poll Polymarket order status until filled or timeout."""
+    async def _wait_for_fill(self, order_id: str, timeout: int, poll_interval: float) -> tuple:
+        """Poll Polymarket order status until filled or timeout.
+
+        Returns (filled_bool, fill_data_dict_or_None) tuple.
+        """
         deadline = time.time() + timeout
         while time.time() < deadline:
             data, err = await self.poly_client.get_order(order_id)
@@ -259,22 +291,29 @@ class ExecutionEngine:
 
             status = data.get("status", "").upper() if isinstance(data, dict) else ""
             if status in ("MATCHED", "FILLED"):
-                return True
+                return True, data
             if status in ("CANCELED", "CANCELLED", "EXPIRED"):
-                return False
+                return False, None
 
             await asyncio.sleep(poll_interval)
 
-        return False
+        return False, None
 
     async def _rollback(self, poly_result: OrderResult) -> tuple:
         """Attempt to unwind a Polymarket position.
 
-        For Phase 2, we only attempt to cancel if still open.
+        If the order is already filled, cancel won't work — log the exposure.
         Full position unwinding (selling back) is deferred to Phase 4.
 
         Returns (success_bool, error) tuple.
         """
+        if poly_result.status == "filled":
+            logger.warning(
+                "Rollback: Poly order %s is already filled — cannot cancel, unhedged exposure remains",
+                poly_result.order_id,
+            )
+            return False, "Order already filled — unhedged exposure (sell-back not yet implemented)"
+
         try:
             ok, err = await self.poly_client.cancel_order(poly_result.order_id)
             if ok:
