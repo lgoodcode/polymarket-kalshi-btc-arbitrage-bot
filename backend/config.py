@@ -100,3 +100,19 @@ POLYMARKET_FEE_RATE_URL = os.environ.get(
     "POLYMARKET_FEE_RATE_URL",
     "https://clob.polymarket.com/fee-rate",
 )
+
+# --- WebSocket streaming ---
+WS_POLYMARKET_URL = os.environ.get(
+    "WS_POLYMARKET_URL",
+    "wss://ws-subscriptions-clob.polymarket.com/ws/market",
+)
+WS_KALSHI_URL = os.environ.get(
+    "WS_KALSHI_URL",
+    "wss://api.elections.kalshi.com/trade-api/ws/v2",
+)
+WS_RECONNECT_MAX_RETRIES = int(os.environ.get("WS_RECONNECT_MAX_RETRIES", "10"))
+WS_RECONNECT_BASE_DELAY = float(os.environ.get("WS_RECONNECT_BASE_DELAY", "1.0"))
+WS_RECONNECT_MAX_DELAY = float(os.environ.get("WS_RECONNECT_MAX_DELAY", "60.0"))
+WS_HEARTBEAT_INTERVAL = float(os.environ.get("WS_HEARTBEAT_INTERVAL", "30.0"))
+WS_SCAN_INTERVAL = float(os.environ.get("WS_SCAN_INTERVAL", "0.05"))  # 50ms target
+WS_FALLBACK_TO_HTTP = os.environ.get("WS_FALLBACK_TO_HTTP", "true").lower() == "true"
