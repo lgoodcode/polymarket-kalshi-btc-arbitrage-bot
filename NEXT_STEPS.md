@@ -43,25 +43,25 @@ These fixes improve detection accuracy within the current read-only architecture
 
 ### 2.1 Kalshi Demo Environment
 
-- [ ] Implement RSA-PSS authentication (Reference Section 5.2)
-- [ ] Implement order placement: limit + IOC (Reference Section 5.3)
-- [ ] Test against Kalshi demo API (`demo-api.kalshi.co`)
-- [ ] Verify order lifecycle: place, fill, cancel
+- [x] Implement RSA-PSS authentication (Reference Section 5.2)
+- [x] Implement order placement: limit + IOC (Reference Section 5.3)
+- [x] Test against Kalshi demo API (`demo-api.kalshi.co`)
+- [x] Verify order lifecycle: place, fill, cancel
 
 ### 2.2 Polymarket SDK Integration
 
-- [ ] Install `py-clob-client` SDK
-- [ ] Implement authentication (private key + API creds derivation)
-- [ ] Implement FOK (taker) and GTC (maker) order placement
-- [ ] Test order placement on Polygon testnet or small positions
+- [x] Install `py-clob-client` SDK
+- [x] Implement authentication (private key + API creds derivation)
+- [x] Implement FOK (taker) and GTC (maker) order placement
+- [x] Test order placement on Polygon testnet or small positions
 
 ### 2.3 Cross-Platform Execution Engine
 
-- [ ] Build parallel execution framework (`asyncio.gather` for both legs)
-- [ ] Implement rollback logic for partial fills (one leg fills, other doesn't)
-- [ ] Implement maker-first strategy: GTC on Polymarket, then IOC on Kalshi on fill
-- [ ] Add `Decimal` for all financial calculations (required for real money)
-- [ ] Fetch Polymarket fee rate dynamically via `GET /fee-rate?token_id=...`
+- [x] Build parallel execution framework (`asyncio.gather` for both legs)
+- [x] Implement rollback logic for partial fills (one leg fills, other doesn't)
+- [x] Implement maker-first strategy: GTC on Polymarket, then IOC on Kalshi on fill
+- [x] Add `Decimal` for all financial calculations (required for real money)
+- [x] Fetch Polymarket fee rate dynamically via `GET /fee-rate?token_id=...`
 
 ### 2.4 New Dependencies
 

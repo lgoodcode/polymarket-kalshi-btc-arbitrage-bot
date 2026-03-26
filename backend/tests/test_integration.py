@@ -10,6 +10,7 @@ import os
 import datetime
 import pytest
 import pytz
+from decimal import Decimal
 from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
@@ -37,32 +38,32 @@ def reset_cache():
     clear_cache()
 
 
-def _make_poly_data(up, down, strike=95000.0, current=95500.0):
+def _make_poly_data(up, down, strike=Decimal("95000"), current=Decimal("95500")):
     return {
-        "price_to_beat": strike,
-        "current_price": current,
-        "prices": {"Up": up, "Down": down},
-        "depth": {"Up": 100.0, "Down": 200.0},
+        "price_to_beat": Decimal(str(strike)),
+        "current_price": Decimal(str(current)),
+        "prices": {"Up": Decimal(str(up)), "Down": Decimal(str(down))},
+        "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         "slug": "bitcoin-up-or-down-march-23-10am-et",
         "target_time_utc": datetime.datetime(2026, 3, 23, 14, 0, 0, tzinfo=UTC),
     }
 
 
-def _make_kalshi_data(markets, ticker="KXBTCD-26MAR2311", current=95500.0):
+def _make_kalshi_data(markets, ticker="KXBTCD-26MAR2311", current=Decimal("95500")):
     return {
         "event_ticker": ticker,
-        "current_price": current,
+        "current_price": Decimal(str(current)),
         "markets": markets,
     }
 
 
 def _make_kalshi_market(strike, yes_ask, no_ask, yes_bid=None, no_bid=None):
     return {
-        "strike": strike,
-        "yes_bid": yes_bid or (1.0 - no_ask),
-        "yes_ask": yes_ask,
-        "no_bid": no_bid or (1.0 - yes_ask),
-        "no_ask": no_ask,
+        "strike": Decimal(str(strike)),
+        "yes_bid": Decimal(str(yes_bid)) if yes_bid else Decimal("1") - Decimal(str(no_ask)),
+        "yes_ask": Decimal(str(yes_ask)),
+        "no_bid": Decimal(str(no_bid)) if no_bid else Decimal("1") - Decimal(str(yes_ask)),
+        "no_ask": Decimal(str(no_ask)),
         "subtitle": f"${int(strike):,} or above",
     }
 
@@ -72,7 +73,7 @@ def _make_kalshi_market(strike, yes_ask, no_ask, yes_bid=None, no_bid=None):
 # =====================================================================
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineArbitrageFound:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -107,7 +108,7 @@ class TestFullPipelineArbitrageFound:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineNoArbitrage:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -134,7 +135,7 @@ class TestFullPipelineNoArbitrage:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineResponseStructure:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -172,7 +173,7 @@ class TestFullPipelineResponseStructure:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelinePolymarketDown:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -193,7 +194,7 @@ class TestFullPipelinePolymarketDown:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineKalshiDown:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -240,7 +241,7 @@ class TestFullPipelineBinanceDown:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineStalePrices:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -259,7 +260,7 @@ class TestFullPipelineStalePrices:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineUnpricedMarkets:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -282,7 +283,7 @@ class TestFullPipelineUnpricedMarkets:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineEqualStrikes:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -306,7 +307,7 @@ class TestFullPipelineEqualStrikes:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineFeeErosion:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -334,7 +335,7 @@ class TestFullPipelineFeeErosion:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineMultipleOpportunities:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -355,7 +356,7 @@ class TestFullPipelineMultipleOpportunities:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineMarketWindow:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -374,7 +375,7 @@ class TestFullPipelineMarketWindow:
 
 @pytest.mark.integration
 class TestCliBotFullPipeline:
-    @patch('arbitrage_bot.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+    @patch('arbitrage_bot.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.create_session', new_callable=AsyncMock)
@@ -398,7 +399,7 @@ class TestCliBotFullPipeline:
 
 
 @pytest.mark.integration
-@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('api.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestFullPipelineTimeout:
     @patch('api.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('api.fetch_polymarket_data_struct', new_callable=AsyncMock)

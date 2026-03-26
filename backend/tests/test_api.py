@@ -1,6 +1,7 @@
 import datetime
 import pytz
 import pytest
+from decimal import Decimal
 from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 
@@ -22,36 +23,34 @@ async def client():
 class TestEstimateFees:
     def test_both_half(self):
         result = _estimate_fees(0.50, 0.50)
-        assert result == 0.0356
+        assert result == Decimal("0.0356")
 
     def test_both_zero_cost(self):
         result = _estimate_fees(0.0, 0.0)
-        assert result == 0.0
+        assert result == Decimal("0.0000")
 
     def test_both_at_one(self):
         result = _estimate_fees(1.0, 1.0)
-        assert result == 0.0
+        assert result == Decimal("0.0000")
 
     def test_one_at_one(self):
         result = _estimate_fees(1.0, 0.50)
-        assert result == 0.02
+        assert result == Decimal("0.02")
 
     def test_typical_arb_costs(self):
-        import math
         result = _estimate_fees(0.48, 0.51)
-        expected = round(0.0624 * 0.48 * 0.52 + math.ceil(0.07 * 0.51 * 0.49 * 100) / 100, 4)
-        assert result == expected
+        assert result == Decimal("0.0356")
 
     def test_above_one_no_fees(self):
         result = _estimate_fees(1.5, 1.5)
-        assert result == 0.0
+        assert result == Decimal("0.0000")
 
 
 # --- _add_fee_info tests ---
 
 class TestAddFeeInfo:
     def test_profitable(self):
-        check = {"poly_cost": 0.40, "kalshi_cost": 0.42, "margin": 0.18}
+        check = {"poly_cost": Decimal("0.40"), "kalshi_cost": Decimal("0.42"), "margin": Decimal("0.18")}
         _add_fee_info(check)
         assert "estimated_fees" in check
         assert "margin_after_fees" in check
@@ -59,13 +58,13 @@ class TestAddFeeInfo:
         assert check["margin_after_fees"] > 0
 
     def test_unprofitable(self):
-        check = {"poly_cost": 0.48, "kalshi_cost": 0.51, "margin": 0.01}
+        check = {"poly_cost": Decimal("0.48"), "kalshi_cost": Decimal("0.51"), "margin": Decimal("0.01")}
         _add_fee_info(check)
         assert check["profitable_after_fees"] is False
         assert check["margin_after_fees"] < 0
 
     def test_mutates_dict(self):
-        check = {"poly_cost": 0.50, "kalshi_cost": 0.50, "margin": 0.10}
+        check = {"poly_cost": Decimal("0.50"), "kalshi_cost": Decimal("0.50"), "margin": Decimal("0.10")}
         _add_fee_info(check)
         assert len(check) == 6
 
@@ -198,10 +197,10 @@ class TestGetArbitrageData:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 95000.0,
-            "current_price": 95500.0,
-            "prices": {"Up": 0.55, "Down": 0.47},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("95000"),
+            "current_price": Decimal("95500"),
+            "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.47")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
             "slug": "test",
             "target_time_utc": None,
         }, None)
@@ -376,10 +375,10 @@ class TestGetArbitrageData:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 95000.0,
-            "current_price": 95500.0,
-            "prices": {"Up": 0.55, "Down": 0.47},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("95000"),
+            "current_price": Decimal("95500"),
+            "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.47")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
             "slug": "test",
             "target_time_utc": None,
         }, None)

@@ -2,6 +2,7 @@
 markers = [
     "integration: mock-based integration tests (full pipeline)",
     "live: tests that hit real external APIs (skip by default)",
+    "execution: tests for the execution engine and exchange clients",
 ]
 testpaths = ["tests"]
 asyncio_mode = "auto"

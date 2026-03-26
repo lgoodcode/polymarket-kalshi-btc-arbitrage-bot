@@ -1,6 +1,7 @@
 import datetime
 import pytz
 import pytest
+from decimal import Decimal
 from unittest.mock import patch, AsyncMock
 
 from fetch_current_kalshi import (
@@ -16,16 +17,16 @@ UTC = pytz.utc
 
 class TestParseStrike:
     def test_normal_strike(self):
-        assert parse_strike("$96,250 or above") == 96250.0
+        assert parse_strike("$96,250 or above") == Decimal("96250")
 
     def test_large_strike(self):
-        assert parse_strike("$100,000 or above") == 100000.0
+        assert parse_strike("$100,000 or above") == Decimal("100000")
 
     def test_small_strike(self):
-        assert parse_strike("$500 or above") == 500.0
+        assert parse_strike("$500 or above") == Decimal("500")
 
     def test_no_comma(self):
-        assert parse_strike("$85000 or above") == 85000.0
+        assert parse_strike("$85000 or above") == Decimal("85000")
 
     def test_no_dollar_sign(self):
         assert parse_strike("no dollar sign") is None
@@ -34,16 +35,16 @@ class TestParseStrike:
         assert parse_strike("") is None
 
     def test_zero_strike(self):
-        assert parse_strike("$0 or above") == 0.0
+        assert parse_strike("$0 or above") == Decimal("0")
 
     def test_multiple_dollar_signs(self):
         result = parse_strike("$94,000 to $95,000")
-        assert result == 94000.0
+        assert result == Decimal("94000")
 
     def test_decimal_strike(self):
         """SEC-013: edge case with decimals in subtitle."""
         result = parse_strike("$96,250.00 or above")
-        assert result == 96250.0
+        assert result == Decimal("96250")
 
 
 # --- get_kalshi_markets tests ---
@@ -104,10 +105,10 @@ class TestFetchKalshiDataStruct:
         data, err = await fetch_kalshi_data_struct(session)
         assert err is None
         assert len(data["markets"]) == 2
-        assert data["markets"][0]["yes_ask"] == 0.87
-        assert data["markets"][0]["no_ask"] == 0.14
-        assert data["markets"][1]["yes_ask"] == 0.22
-        assert data["markets"][1]["no_ask"] == 0.79
+        assert data["markets"][0]["yes_ask"] == Decimal("0.8700")
+        assert data["markets"][0]["no_ask"] == Decimal("0.1400")
+        assert data["markets"][1]["yes_ask"] == Decimal("0.2200")
+        assert data["markets"][1]["no_ask"] == Decimal("0.7900")
 
     @patch('fetch_current_kalshi.get_kalshi_markets', new_callable=AsyncMock)
     @patch('fetch_current_kalshi.get_binance_current_price', new_callable=AsyncMock)

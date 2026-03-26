@@ -1,5 +1,6 @@
 import asyncio
 import pytest
+from decimal import Decimal
 from unittest.mock import patch, AsyncMock
 
 from binance import get_binance_current_price, get_binance_open_price
@@ -10,7 +11,7 @@ class TestGetBinanceCurrentPrice:
     async def test_success(self, mock_fetch, sample_binance_price_response):
         mock_fetch.return_value = sample_binance_price_response
         price, err = await get_binance_current_price(AsyncMock())
-        assert price == 95500.0
+        assert price == Decimal("95500.00")
         assert err is None
 
     @patch('binance.fetch_json', new_callable=AsyncMock)
@@ -36,7 +37,7 @@ class TestGetBinanceOpenPrice:
         mock_fetch.return_value = sample_binance_kline_response
         target = datetime.datetime(2026, 3, 23, 14, 0, 0, tzinfo=pytz.utc)
         price, err = await get_binance_open_price(AsyncMock(), target)
-        assert price == 95000.0
+        assert price == Decimal("95000.00")
         assert err is None
 
     @patch('binance.fetch_json', new_callable=AsyncMock)

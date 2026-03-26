@@ -4,6 +4,7 @@ All constants are collected here. Override any value via environment variable
 or an optional .env file (requires python-dotenv).
 """
 import os
+from decimal import Decimal
 
 try:
     from dotenv import load_dotenv
@@ -40,9 +41,9 @@ SYMBOL = os.environ.get("SYMBOL", "BTCUSDT")
 # --- Fee multipliers (parabolic: multiplier * price * (1 - price)) ---
 # Polymarket crypto multiplier default is 0.0624. Update to 0.0720 via
 # POLYMARKET_FEE_MULTIPLIER env var when the rate changes (target: March 30 2026).
-POLYMARKET_FEE_MULTIPLIER = float(os.environ.get("POLYMARKET_FEE_MULTIPLIER", "0.0624"))
+POLYMARKET_FEE_MULTIPLIER = Decimal(os.environ.get("POLYMARKET_FEE_MULTIPLIER", "0.0624"))
 # Kalshi taker fee: ceil_to_cent(0.07 * price * (1 - price))
-KALSHI_FEE_MULTIPLIER = float(os.environ.get("KALSHI_FEE_MULTIPLIER", "0.07"))
+KALSHI_FEE_MULTIPLIER = Decimal(os.environ.get("KALSHI_FEE_MULTIPLIER", "0.07"))
 
 # --- HTTP settings ---
 REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "10"))
@@ -69,8 +70,33 @@ LOG_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", str(10 * 1024 * 1024)))  # 1
 LOG_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", "5"))
 
 # --- Price sanity ---
-PRICE_SUM_MIN = float(os.environ.get("PRICE_SUM_MIN", "0.85"))
-PRICE_SUM_MAX = float(os.environ.get("PRICE_SUM_MAX", "1.15"))
+PRICE_SUM_MIN = Decimal(os.environ.get("PRICE_SUM_MIN", "0.85"))
+PRICE_SUM_MAX = Decimal(os.environ.get("PRICE_SUM_MAX", "1.15"))
 
 # --- Staleness ---
 DATA_STALENESS_WARN_MS = int(os.environ.get("DATA_STALENESS_WARN_MS", "5000"))
+
+# --- Execution ---
+EXECUTION_ENABLED = os.environ.get("EXECUTION_ENABLED", "false").lower() == "true"
+EXECUTION_DRY_RUN = os.environ.get("EXECUTION_DRY_RUN", "true").lower() == "true"
+MIN_MARGIN_AFTER_FEES = Decimal(os.environ.get("MIN_MARGIN_AFTER_FEES", "0.005"))
+DEFAULT_ORDER_SIZE = int(os.environ.get("DEFAULT_ORDER_SIZE", "10"))
+POLY_FILL_TIMEOUT = int(os.environ.get("POLY_FILL_TIMEOUT", "30"))  # seconds
+POLY_FILL_POLL_INTERVAL = float(os.environ.get("POLY_FILL_POLL_INTERVAL", "1.0"))
+
+# --- Kalshi Auth ---
+KALSHI_API_BASE_URL = os.environ.get(
+    "KALSHI_API_BASE_URL",
+    "https://demo-api.kalshi.co/trade-api/v2",
+)
+KALSHI_API_KEY_ID = os.environ.get("KALSHI_API_KEY_ID", "")
+KALSHI_PRIVATE_KEY_PATH = os.environ.get("KALSHI_PRIVATE_KEY_PATH", "")
+
+# --- Polymarket Execution ---
+POLYMARKET_HOST = os.environ.get("POLYMARKET_HOST", "https://clob.polymarket.com")
+POLYMARKET_PRIVATE_KEY = os.environ.get("POLYMARKET_PRIVATE_KEY", "")
+POLYMARKET_CHAIN_ID = int(os.environ.get("POLYMARKET_CHAIN_ID", "137"))
+POLYMARKET_FEE_RATE_URL = os.environ.get(
+    "POLYMARKET_FEE_RATE_URL",
+    "https://clob.polymarket.com/fee-rate",
+)

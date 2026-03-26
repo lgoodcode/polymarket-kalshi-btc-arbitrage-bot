@@ -1,6 +1,7 @@
 import datetime
 import pytz
 import pytest
+from decimal import Decimal
 from unittest.mock import patch, AsyncMock, MagicMock
 
 from arbitrage_bot import _estimate_fees, check_arbitrage
@@ -13,24 +14,24 @@ UTC = pytz.utc
 class TestEstimateFees:
     def test_both_half(self):
         result = _estimate_fees(0.50, 0.50)
-        assert result == 0.0356
+        assert result == Decimal("0.0356")
 
     def test_both_zero(self):
         result = _estimate_fees(0.0, 0.0)
-        assert result == 0.0
+        assert result == Decimal("0.0000")
 
     def test_both_one(self):
         result = _estimate_fees(1.0, 1.0)
-        assert result == 0.0
+        assert result == Decimal("0.0000")
 
     def test_one_at_one(self):
         result = _estimate_fees(1.0, 0.50)
-        assert result == 0.02
+        assert result == Decimal("0.0200")
 
 
 # --- check_arbitrage tests ---
 
-@patch('arbitrage_bot.get_binance_current_price', new_callable=AsyncMock, return_value=(95500.0, None))
+@patch('arbitrage_bot.get_binance_current_price', new_callable=AsyncMock, return_value=(Decimal("95500"), None))
 class TestCheckArbitrage:
     @patch('arbitrage_bot.fetch_kalshi_data_struct', new_callable=AsyncMock)
     @patch('arbitrage_bot.fetch_polymarket_data_struct', new_callable=AsyncMock)
@@ -51,7 +52,7 @@ class TestCheckArbitrage:
     async def test_kalshi_error(self, mock_session, mock_poly, mock_kalshi, mock_binance, capsys):
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
-        mock_poly.return_value = ({"price_to_beat": 95000.0, "prices": {"Up": 0.55, "Down": 0.47}, "depth": {"Up": 100.0, "Down": 200.0}}, None)
+        mock_poly.return_value = ({"price_to_beat": Decimal("95000"), "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.47")}, "depth": {"Up": Decimal("100"), "Down": Decimal("200")}}, None)
         mock_kalshi.return_value = (None, "Kalshi Error: API down")
 
         await check_arbitrage()
@@ -79,13 +80,13 @@ class TestCheckArbitrage:
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
             "price_to_beat": None,
-            "current_price": 95500.0,
-            "prices": {"Up": 0.55, "Down": 0.47},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "current_price": Decimal("95500"),
+            "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.47")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 95500.0,
-            "markets": [{"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.52, "no_bid": 0.47, "no_ask": 0.49}]
+            "event_ticker": "TEST", "current_price": Decimal("95500"),
+            "markets": [{"strike": Decimal("95000"), "yes_bid": Decimal("0.50"), "yes_ask": Decimal("0.52"), "no_bid": Decimal("0.47"), "no_ask": Decimal("0.49")}]
         }, None)
 
         await check_arbitrage()
@@ -99,14 +100,14 @@ class TestCheckArbitrage:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 95000.0,
-            "current_price": 95500.0,
-            "prices": {"Up": 0.30, "Down": 0.30},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("95000"),
+            "current_price": Decimal("95500"),
+            "prices": {"Up": Decimal("0.30"), "Down": Decimal("0.30")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 95500.0,
-            "markets": [{"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.52, "no_bid": 0.47, "no_ask": 0.49}]
+            "event_ticker": "TEST", "current_price": Decimal("95500"),
+            "markets": [{"strike": Decimal("95000"), "yes_bid": Decimal("0.50"), "yes_ask": Decimal("0.52"), "no_bid": Decimal("0.47"), "no_ask": Decimal("0.49")}]
         }, None)
 
         await check_arbitrage()
@@ -121,13 +122,13 @@ class TestCheckArbitrage:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 95000.0,
-            "current_price": 95500.0,
-            "prices": {"Up": 0.55, "Down": 0.47},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("95000"),
+            "current_price": Decimal("95500"),
+            "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.47")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 95500.0,
+            "event_ticker": "TEST", "current_price": Decimal("95500"),
             "markets": []
         }, None)
 
@@ -142,15 +143,15 @@ class TestCheckArbitrage:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 96000.0,
-            "current_price": 96500.0,
-            "prices": {"Up": 0.60, "Down": 0.35},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("96000"),
+            "current_price": Decimal("96500"),
+            "prices": {"Up": Decimal("0.60"), "Down": Decimal("0.35")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 96500.0,
+            "event_ticker": "TEST", "current_price": Decimal("96500"),
             "markets": [
-                {"strike": 95000.0, "yes_bid": 0.40, "yes_ask": 0.42, "no_bid": 0.55, "no_ask": 0.58, "subtitle": "$95,000 or above"},
+                {"strike": Decimal("95000"), "yes_bid": Decimal("0.40"), "yes_ask": Decimal("0.42"), "no_bid": Decimal("0.55"), "no_ask": Decimal("0.58"), "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -167,15 +168,15 @@ class TestCheckArbitrage:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 94000.0,
-            "current_price": 94500.0,
-            "prices": {"Up": 0.35, "Down": 0.60},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("94000"),
+            "current_price": Decimal("94500"),
+            "prices": {"Up": Decimal("0.35"), "Down": Decimal("0.60")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 94500.0,
+            "event_ticker": "TEST", "current_price": Decimal("94500"),
             "markets": [
-                {"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.58, "no_bid": 0.40, "no_ask": 0.42, "subtitle": "$95,000 or above"},
+                {"strike": Decimal("95000"), "yes_bid": Decimal("0.50"), "yes_ask": Decimal("0.58"), "no_bid": Decimal("0.40"), "no_ask": Decimal("0.42"), "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -192,15 +193,15 @@ class TestCheckArbitrage:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 95000.0,
-            "current_price": 95500.0,
-            "prices": {"Up": 0.45, "Down": 0.47},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("95000"),
+            "current_price": Decimal("95500"),
+            "prices": {"Up": Decimal("0.45"), "Down": Decimal("0.47")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 95500.0,
+            "event_ticker": "TEST", "current_price": Decimal("95500"),
             "markets": [
-                {"strike": 95000.0, "yes_bid": 0.30, "yes_ask": 0.35, "no_bid": 0.30, "no_ask": 0.35, "subtitle": "$95,000 or above"},
+                {"strike": Decimal("95000"), "yes_bid": Decimal("0.30"), "yes_ask": Decimal("0.35"), "no_bid": Decimal("0.30"), "no_ask": Decimal("0.35"), "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -216,15 +217,15 @@ class TestCheckArbitrage:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 95000.0,
-            "current_price": 95500.0,
-            "prices": {"Up": 0.55, "Down": 0.47},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("95000"),
+            "current_price": Decimal("95500"),
+            "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.47")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 95500.0,
+            "event_ticker": "TEST", "current_price": Decimal("95500"),
             "markets": [
-                {"strike": 95000.0, "yes_bid": 0.50, "yes_ask": 0.80, "no_bid": 0.47, "no_ask": 0.80, "subtitle": "$95,000 or above"},
+                {"strike": Decimal("95000"), "yes_bid": Decimal("0.50"), "yes_ask": Decimal("0.80"), "no_bid": Decimal("0.47"), "no_ask": Decimal("0.80"), "subtitle": "$95,000 or above"},
             ]
         }, None)
 
@@ -239,15 +240,15 @@ class TestCheckArbitrage:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 95000.0,
-            "current_price": 95500.0,
-            "prices": {"Up": 0.55, "Down": 0.47},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("95000"),
+            "current_price": Decimal("95500"),
+            "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.47")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 95500.0,
+            "event_ticker": "TEST", "current_price": Decimal("95500"),
             "markets": [
-                {"strike": 94000.0, "yes_bid": 0, "yes_ask": 0, "no_bid": 0, "no_ask": 0, "subtitle": "$94,000 or above"},
+                {"strike": Decimal("94000"), "yes_bid": Decimal("0"), "yes_ask": Decimal("0"), "no_bid": Decimal("0"), "no_ask": Decimal("0"), "subtitle": "$94,000 or above"},
             ]
         }, None)
 
@@ -263,15 +264,15 @@ class TestCheckArbitrage:
         mock_session.return_value = AsyncMock()
         mock_session.return_value.close = AsyncMock()
         mock_poly.return_value = ({
-            "price_to_beat": 96000.0,
-            "current_price": 96500.0,
-            "prices": {"Up": 0.55, "Down": 0.40},
-            "depth": {"Up": 100.0, "Down": 200.0},
+            "price_to_beat": Decimal("96000"),
+            "current_price": Decimal("96500"),
+            "prices": {"Up": Decimal("0.55"), "Down": Decimal("0.40")},
+            "depth": {"Up": Decimal("100"), "Down": Decimal("200")},
         }, None)
         mock_kalshi.return_value = ({
-            "event_ticker": "TEST", "current_price": 96500.0,
+            "event_ticker": "TEST", "current_price": Decimal("96500"),
             "markets": [
-                {"strike": 95000.0, "yes_bid": 0.30, "yes_ask": 0.32, "no_bid": 0.65, "no_ask": 0.68, "subtitle": "$95,000 or above"},
+                {"strike": Decimal("95000"), "yes_bid": Decimal("0.30"), "yes_ask": Decimal("0.32"), "no_bid": Decimal("0.65"), "no_ask": Decimal("0.68"), "subtitle": "$95,000 or above"},
             ]
         }, None)
 

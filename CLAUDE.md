@@ -4,7 +4,7 @@
 
 Real-time arbitrage detection bot for Bitcoin 1-Hour Price markets between **Polymarket** and **Kalshi** prediction markets. When the combined cost of opposite positions across exchanges falls below $1.00 (the guaranteed minimum payout), a risk-free profit exists.
 
-The bot is **read-only** — it detects opportunities but does not execute trades. No API keys are required; all endpoints are public.
+The bot detects opportunities and includes an execution engine for cross-platform trading (disabled by default, dry-run mode). Detection requires no API keys; execution requires Kalshi RSA key + Polymarket private key.
 
 See `thesis.md` for the mathematical foundation.
 
@@ -25,9 +25,17 @@ External APIs (Polymarket, Kalshi, Binance)
     api.py          arbitrage_bot.py
     (FastAPI :8000)  (CLI monitor)
         │
-        ├── arbitrage.py   # Shared fee + comparison engine
-        ├── config.py      # Centralized config (env var overrides)
-        ├── log_config.py  # Logging setup (JSON file + console)
+        ├── arbitrage.py      # Shared fee + comparison engine
+        ├── config.py         # Centralized config (env var overrides)
+        ├── decimal_utils.py  # Decimal/JSON conversion helpers
+        ├── log_config.py     # Logging setup (JSON file + console)
+        │
+        └── execution/        # Cross-platform trading engine
+            ├── models.py            # OrderRequest, OrderResult, ExecutionPlan
+            ├── kalshi_auth.py       # RSA-PSS authentication
+            ├── kalshi_client.py     # Kalshi order placement/management
+            ├── polymarket_client.py # py-clob-client SDK wrapper
+            └── engine.py            # Maker-first + parallel execution
         │
     frontend/        (Next.js :3000, polls API every 5s)
 ```
@@ -51,7 +59,7 @@ External APIs (Polymarket, Kalshi, Binance)
 
 | Layer    | Technology                                  |
 |----------|---------------------------------------------|
-| Backend  | Python 3.9+, FastAPI, Uvicorn, aiohttp, python-dotenv |
+| Backend  | Python 3.9+, FastAPI, Uvicorn, aiohttp, python-dotenv, py-clob-client, cryptography |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, shadcn/ui |
 | Testing  | pytest, pytest-asyncio, pytest-mock, httpx, aioresponses, vcrpy |
 
@@ -71,7 +79,15 @@ backend/
   get_current_markets.py        # Market URL coordination
   find_new_market.py            # Polymarket slug generation
   find_new_kalshi_market.py     # Kalshi slug generation
-  pyproject.toml                # pytest markers (integration, live)
+  decimal_utils.py              # Decimal/JSON conversion helpers
+  execution/                    # Cross-platform trading engine
+    __init__.py
+    models.py                   # OrderRequest, OrderResult, ExecutionPlan, ExecutionResult
+    kalshi_auth.py              # RSA-PSS authentication
+    kalshi_client.py            # Kalshi order placement/management
+    polymarket_client.py        # py-clob-client SDK wrapper
+    engine.py                   # Maker-first + parallel execution orchestrator
+  pyproject.toml                # pytest markers (integration, live, execution)
   requirements.txt              # Production dependencies
   requirements-dev.txt          # Dev/test dependencies
   tests/
@@ -88,6 +104,13 @@ backend/
     test_e2e_recorded.py            # VCR cassette replay tests
     test_e2e_live.py                # Live API smoke tests (RUN_LIVE_TESTS=1)
     fixtures/                       # JSON fixture files for integration tests
+    execution/                      # Execution engine tests
+      test_models.py
+      test_kalshi_auth.py
+      test_kalshi_client.py
+      test_polymarket_client.py
+      test_engine.py
+      test_api_endpoints.py
 
 frontend/
   app/
@@ -118,8 +141,11 @@ python arbitrage_bot.py
 # Run unit tests only (fast)
 pytest tests/ -m "not integration and not live" -v
 
-# Run unit + integration tests (146 tests, CI-safe)
+# Run unit + integration + execution tests (224+ tests, CI-safe)
 pytest tests/ -m "not live" -v
+
+# Run execution tests only
+pytest tests/execution/ -v
 
 # Run all tests including live smoke tests
 RUN_LIVE_TESTS=1 pytest tests/ -v
@@ -161,6 +187,10 @@ npm run lint
 - **Polymarket prices**: Fetched from CLOB order book (best ask + depth/size). Up + Down should sum to ~$1.00.
 - **Arbitrage logic**: If Poly cost + Kalshi cost < $1.00 for complementary contracts, risk-free profit exists.
 - **Time handling**: All slugs use Eastern Time (ET). Polymarket uses current hour; Kalshi uses next hour's identifier (+1 hour offset).
+- **Financial precision**: All price arithmetic uses `decimal.Decimal` (via `decimal_utils.py`). Prices parsed as `Decimal(str_value)` from APIs; converted to `float` at JSON serialization boundary in `api.py`.
+- **Execution engine**: Disabled by default (`EXECUTION_ENABLED=false`, `EXECUTION_DRY_RUN=true`). Maker-first strategy: GTC on Polymarket (zero maker fee), then IOC on Kalshi. Kalshi defaults to demo API (`demo-api.kalshi.co`).
+- **Kalshi authentication**: RSA-PSS signed headers. Message = `timestamp + METHOD + path`. Requires `KALSHI_API_KEY_ID` and `KALSHI_PRIVATE_KEY_PATH` env vars.
+- **Polymarket authentication**: Uses `py-clob-client` SDK with Ethereum private key. Requires `POLYMARKET_PRIVATE_KEY` env var.
 
 ## Code Conventions
 
@@ -187,7 +217,7 @@ npm run lint
 - Fixtures in `conftest.py` provide standardized mock data; JSON fixtures in `tests/fixtures/`
 - Test files mirror source modules (e.g., `test_api.py` tests `api.py`)
 - Use `@patch` decorators for mocking, `pytest-mock` for fixtures
-- pytest markers: `integration`, `live` (configured in `backend/pyproject.toml`)
+- pytest markers: `integration`, `live`, `execution` (configured in `backend/pyproject.toml`)
 - When adding new external API calls, always add corresponding mocked tests
 
 ## Key Domain Concepts

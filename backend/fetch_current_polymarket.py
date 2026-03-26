@@ -5,6 +5,7 @@ and BTC prices from Binance.
 """
 import json
 import logging
+from decimal import Decimal
 import aiohttp
 from get_current_markets import get_current_market_urls
 from http_utils import fetch_json, create_session
@@ -18,18 +19,18 @@ async def get_clob_price(session: aiohttp.ClientSession, token_id: str):
     """Fetch best ask from the Polymarket CLOB order book.
 
     Returns (price, size) tuple. Returns (None, None) on error,
-    (0.0, 0.0) when no asks are available.
+    (Decimal("0"), Decimal("0")) when no asks are available.
     """
     try:
         data = await fetch_json(session, POLYMARKET_CLOB_URL, params={"token_id": token_id})
 
         asks = data.get("asks", [])
         if asks:
-            best = min(asks, key=lambda a: float(a["price"]))
-            price = float(best["price"])
-            size = float(best.get("size", "0"))
-            return (price, size) if price > 0 else (0.0, 0.0)
-        return (0.0, 0.0)
+            best = min(asks, key=lambda a: Decimal(a["price"]))
+            price = Decimal(best["price"])
+            size = Decimal(best.get("size", "0"))
+            return (price, size) if price > 0 else (Decimal("0"), Decimal("0"))
+        return (Decimal("0"), Decimal("0"))
     except Exception as e:
         logger.error("CLOB price fetch failed for token %s: %s", token_id, e)
         return (None, None)
